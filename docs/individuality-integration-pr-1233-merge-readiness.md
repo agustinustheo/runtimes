@@ -193,13 +193,12 @@ starting point, but its network is Paseo `1502`/`1500` and assumes Sudo.
 
 ## Local-testing branch and signing state
 
-No local-testing branch or stacked fork PR was created: no harness files were added because the
-P0 migration and CI-source blockers stop the porting stage. The signing prerequisite is also
-blocked. GitHub's public key list contains both parity keys, but the required hardware signing
-probe for `C4F626D78900737B` failed with `gpg: signing failed: Timeout`; the probe for
-`FE7D6132F58402EC` did not complete within its timeout. The repository's existing local signing
-configuration was not changed and the gmail key was not used.
+The report is published in the fork-only stacked draft PR
+<https://github.com/agustinustheo/runtimes/pull/1>, with base
+`individuality-integration` and head `individuality-integration-local-testing`.
+It does not target `polkadot-fellows/runtimes`.
 
-The only uncommitted file left by this review is this report:
-
-`docs/individuality-integration-pr-1233-merge-readiness.md`
+The report commit is GPG-signed by the approved hardware key `C4F626D78900737B` with identity
+`agustinus@parity.io`; `git log --show-signature` validates it. The gmail key was not used.
+No harness files were added because the P0 migration and CI-source blockers stop the porting
+stage.
