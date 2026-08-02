@@ -1,0 +1,3 @@
+endpoint: wss://people-polkadot.rpc.polkadot.io
+runtime-log-level: 4
+process-queued-messages: true
