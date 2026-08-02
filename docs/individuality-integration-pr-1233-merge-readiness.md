@@ -8,8 +8,9 @@ Reviewed 2026-08-02 against `polkadot-fellows/runtimes` PR #1233, head
 
 **Do not merge.** The runtime build configurations compile, but the upgrade cannot create the
 fixed PGAS asset on live Asset Hub Polkadot, which leaves every PGAS flow unusable. The PR CI is
-also red because the private Individuality dependency cannot be fetched in GitHub Actions. There
-is no end-to-end test of the People-to-Asset-Hub ring-root delivery path.
+also red because the available public Individuality snapshot predates a required pallet. The
+critical People-to-Asset-Hub ring-root delivery path now has an emulated test, but
+the bootstrap/migration lifecycle remains unproven end-to-end.
 
 ## What passed
 
@@ -22,14 +23,16 @@ Git SSH transport can.
 | `cargo build --release -p people-polkadot-runtime -p asset-hub-polkadot-runtime` | Passed (6m 22s), no compiler warnings. |
 | Same build with `--features runtime-benchmarks` | Passed (3m 53s), no compiler warnings. |
 | Same build with `--features try-runtime` | Passed (2m 48s), no compiler warnings. |
-| `cargo test -p people-polkadot-integration-tests -p asset-hub-polkadot-integration-tests` | Passed: 78 Asset Hub tests and 20 People tests. The test run logs expected emulator warnings/errors for negative-path XCM cases. |
+| `cargo test -p people-polkadot-integration-tests -p asset-hub-polkadot-integration-tests` | Passed: 78 Asset Hub tests and 21 People tests. The test run logs expected emulator warnings/errors for negative-path XCM cases. |
 | `cargo test -p zombienet-sdk-tests --no-run` | Passed. It emits Cargo's future-incompatibility warning for third-party `trie-db v0.30.0`. |
 
 The existing PR is open and draft. Its `rustfmt` and changelog checks pass, but `clippy` and
-workspace-features are failing. Both jobs fail while fetching
-`ssh://git@github.com/paritytech/individuality@fba8a64…`: the Actions runner has no SSH
-credential, so Cargo reports the revision as unavailable. This is an actionable CI/reproducibility
-blocker even though the local Git-CLI transport can fetch that revision.
+workspace-features are failing. All 21 Individuality dependencies were tested against the public
+mirror's immutable `main` snapshot `28b7d07dab05bbd05f6b664278b5c83841e212d3`. A clean-Cargo-home
+fetch reaches that HTTPS source without credentials or `CARGO_NET_GIT_FETCH_WITH_CLI`, proving the
+transport is CI-suitable. Resolution then fails because that older snapshot does not publish
+`indiv-pallet-relay-randomness`; release, benchmark, try-runtime, and emulated-test commands all
+stop with that same error before compilation.
 
 ## Findings, highest severity first
 
@@ -50,24 +53,41 @@ payment, and PGAS-denominated Revive deposits dead on arrival.
 Resolve the Asset Hub asset-ID strategy before enabling the migration, then run the migration
 against a current Asset Hub snapshot. Do not rely on the migration's log line as a success signal.
 
-### P0 — PR CI cannot resolve the private Individuality source dependency
+### P0 — the public snapshot predates required relay-randomness support
 
-Every Individuality workspace dependency uses an SSH URL in
-[Cargo.toml](../Cargo.toml:92). GitHub Actions has no corresponding credential, causing both
-required checks to fail before metadata or linting runs. Either provide CI read access safely or
-move the dependency source to a CI-resolvable, pinned location.
+The public mirror is intentionally snapshot-based, so it does not need to reproduce the internal
+SHA `fba8a64…`. Its current public snapshot is nevertheless too old: it has no
+`indiv-pallet-relay-randomness` package, and Cargo cannot resolve People Polkadot from it.
 
-### P1 — the critical People → Asset Hub ring-root flow has no in-repo test
+The missing pallet was introduced by internal Individuality PR
+[#1204, "Relay chain randomness"](https://github.com/paritytech/individuality/pull/1204), commit
+`fba8a64f6a0e91cbacd8ca78767c9cf9f989da41`. People Polkadot requires its
+`RelayBlockRandomness<Runtime>` type for `indiv_pallet_game::Config::Randomness`, installs the
+pallet at index 6, and wires it as `cumulus_pallet_parachain_system::Config::OnSystemEvent`.
 
-The emulated suites contain no `MembersNotifier`, `MembersSubscriber`, `Pgas`, or Individuality
-reference. The passing 98 tests consequently do not exercise the new wire protocol:
+The exact required action is to cut a newer `individuality-community` release/snapshot containing
+the complete relay-randomness pallet and PR #1204 API. Then re-pin all 21 dependencies to that
+new immutable public SHA, regenerate `Cargo.lock`, run a clean fetch without credentials, and
+repeat the release, benchmark, try-runtime, and emulated suites. Do not vendor the pallet or
+downgrade this runtime's randomness integration to fit `28b7d07`.
+
+### P1 — the critical People → Asset Hub ring-root flow lacks a full lifecycle test
+
+The new emulated test
+[individuality.rs](../integration-tests/emulated/tests/people/people-polkadot/src/tests/individuality.rs:25)
+exercises the core wire path: it configures People-to-Asset-Hub HRMP state, seeds a ring root,
+subscribes from People, dispatches the authorized notifier page, delivers XCMP, and asserts the
+Asset Hub subscriber is `Active` with exponent `R2e9` and the exact root/revision. It also asserts
+the configured PGAS asset id. This closes the previous bare notification coverage gap.
+
+It does not prove the full on-chain lifecycle:
 
 1. configure a People collection/ring and root;
 2. open both HRMP directions;
 3. root-call `MembersNotifier::subscribe(1000, collections, 97)`;
 4. drive XCMP delivery; and
-5. assert Asset Hub `MembersSubscriber::Subscription == Active`, the propagated ring exponent/root,
-   and acceptance of a proof made against that root.
+5. assert acceptance of a proof made against that root and the PGAS/alias flows after real
+   bootstrap.
 
 The wiring itself is internally consistent: the target uses People `1004`, Asset Hub `1000`,
 Bulletin `1010`, notifier pallet index `69`, subscriber index `97`, `Pgas` index `99`, and
@@ -157,10 +177,11 @@ The existing runtimes zombienet smoke is not suitable as-is: it launches Coretim
 Bulletin `1010`, not People `1004` and Asset Hub `1000`. The Individuality harness is the correct
 starting point, but its network is Paseo `1502`/`1500` and assumes Sudo.
 
-1. On a separate `individuality-integration-local-testing` branch, add a dedicated network config
-   using `polkadot-local`, `people-polkadot-local` (1004), `asset-hub-polkadot-local` (1000), and
-   optionally `bulletin-polkadot-local` (1010). Generate all specs through this repository's
-   `chain-spec-generator`; use raw specs for zombienet.
+1. On the separate `individuality-integration-local-testing` branch, the uncommitted
+   [local harness](../integration-tests/individuality-local/README.md) provides a dedicated
+   network config using `polkadot-local`, `people-polkadot-local` (1004),
+   `asset-hub-polkadot-local` (1000), and optionally `bulletin-polkadot-local` (1010). Generate
+   all specs through this repository's `chain-spec-generator`; use raw specs for zombienet.
 2. Carry the reference relay genesis `EccRfc163` host-function patch. It is needed when the People
    runtime validates ZK chunk payloads.
 3. Do **not** preopen HRMP in genesis. Open both People ↔ Asset Hub channels after startup; the
@@ -176,10 +197,18 @@ starting point, but its network is Paseo `1502`/`1500` and assumes Sudo.
 6. Run the adapted initialization suite. Its required observable checks are People subscriber
    presence, Asset Hub `Subscription == Active`, propagated people exponent `R2e9`, and an actual
    proof-backed PGAS/alias flow. Add the same core assertion to an emulated test where possible.
+   The checked-in harness generated all four raw specs with this repository's
+   `chain-spec-generator` and passed `polkadot-omni-node export-genesis-wasm` for People. It was
+   not spawned: the deliberately external local-governance adapter has not been implemented, and
+   the known PGAS P0 would prevent the required proof-backed final flow.
 7. For a live-state migration check, obtain the repository's v0.10.1 `try-runtime` binary, build
    the Asset Hub wasm with `try-runtime`, create/obtain a fresh Asset Hub snapshot, then run the
    workflow-equivalent `try-runtime --runtime <wasm> on-runtime-upgrade --checks=<CI checks> snap
    --path snapshot.raw`. The local machine had no `try-runtime` binary, so this was not executed.
+   A live Chopsticks attempt with freshly built `try-runtime` WASM reached the upgrade call, but
+   both Chopsticks 1.3.1 and 1.5.0 stopped before migrations because they lack
+   `ext_host_calls_bls12_381_final_exponentiation_version_1`; the exact evidence and retry command
+   are in `integration-tests/individuality-local/chopsticks/asset-hub-run-2026-08-02.md`.
 
 ## Release housekeeping
 
@@ -188,17 +217,24 @@ starting point, but its network is Paseo `1502`/`1500` and assumes Sudo.
   commits before final review.
 - Run the generated-weight work on the designated reference-hardware runner and replace all
   placeholder files.
-- Make CI capable of fetching the pinned Individuality revision, then run clippy, feature checks,
-  migration checks, and the new ring-root test.
+- After the Individuality team cuts a community snapshot containing PR #1204, re-pin it and run
+  clean fetch, clippy, feature checks, migration checks, and the new ring-root test.
 
 ## Local-testing branch and signing state
 
-The report is published in the fork-only stacked draft PR
+The earlier report is published in the fork-only stacked draft PR
 <https://github.com/agustinustheo/runtimes/pull/1>, with base
 `individuality-integration` and head `individuality-integration-local-testing`.
 It does not target `polkadot-fellows/runtimes`.
 
-The report commit is GPG-signed by the approved hardware key `C4F626D78900737B` with identity
-`agustinus@parity.io`; `git log --show-signature` validates it. The gmail key was not used.
-No harness files were added because the P0 migration and CI-source blockers stop the porting
-stage.
+The core test commit `d09c53a9d8f9d5e710bb87a050125e3d2fcada04` is local-only and GPG-signed
+by the approved hardware key `C4F626D78900737B` with identity `agustinus@parity.io`;
+`git log --show-signature` validates it. The gmail key was not used.
+
+The user-assisted GUI pinentry workflow now works: the Git-equivalent
+`gpg --status-fd=2 -bsau C4F626D78900737B` probe returned `SIG_CREATED` after PIN/touch. No
+unsigned fallback was used. The local-only harness commit `e539451a` and this report are signed
+and verified with `agustinus@parity.io`, but are not pushed. The only
+outstanding uncommitted change is the incompatible mirror re-pin in
+`.worktrees/individuality-integration-main/Cargo.toml`; no source-swap commit should be published
+until the Individuality team cuts the required newer snapshot.
