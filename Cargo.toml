@@ -86,30 +86,29 @@ glutton-kusama-runtime = { path = "system-parachains/gluttons/glutton-kusama" }
 grandpa = { version = "0.42.0", package = "sc-consensus-grandpa" }
 grandpa-primitives = { version = "29.0.0", default-features = false, package = "sp-consensus-grandpa" }
 hex-literal = { version = "0.4.1" }
-# The Individuality SDK. Not published to crates.io yet, so every crate is pinned to the same
-# revision of the source repository.
-# TODO: move to individuality-community.
-indiv-pallet-airdrop = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-alias-accounts = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-chunks-manager = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-coinage = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-dotns-gateway = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-dummy-dim = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-game = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-honour = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-members = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-members-notifier = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-members-subscriber = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-origin-restriction = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-people = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-people-lite = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-pgas = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-proof-of-ink = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-relay-randomness = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-resources = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-pallet-score = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-precompile-personhood = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
-indiv-support = { git = "ssh://git@github.com/paritytech/individuality", rev = "fba8a64f6a0e91cbacd8ca78767c9cf9f989da41", default-features = false }
+# The Individuality SDK is a local sibling checkout for development. This local-only setup is
+# intentionally not suitable for GitHub CI.
+indiv-pallet-airdrop = { path = "../individuality/pallets/airdrop", default-features = false }
+indiv-pallet-alias-accounts = { path = "../individuality/pallets/alias-accounts", default-features = false }
+indiv-pallet-chunks-manager = { path = "../individuality/pallets/chunks-manager", default-features = false }
+indiv-pallet-coinage = { path = "../individuality/pallets/coinage", default-features = false }
+indiv-pallet-dotns-gateway = { path = "../individuality/pallets/dotns-gateway", default-features = false }
+indiv-pallet-dummy-dim = { path = "../individuality/pallets/dummy-dim", default-features = false }
+indiv-pallet-game = { path = "../individuality/pallets/game", default-features = false }
+indiv-pallet-honour = { path = "../individuality/pallets/honour", default-features = false }
+indiv-pallet-members = { path = "../individuality/pallets/members", default-features = false }
+indiv-pallet-members-notifier = { path = "../individuality/pallets/members-notifier", default-features = false }
+indiv-pallet-members-subscriber = { path = "../individuality/pallets/members-subscriber", default-features = false }
+indiv-pallet-origin-restriction = { path = "../individuality/pallets/origin-restriction", default-features = false }
+indiv-pallet-people = { path = "../individuality/pallets/people-multi", default-features = false }
+indiv-pallet-people-lite = { path = "../individuality/pallets/people-lite", default-features = false }
+indiv-pallet-pgas = { path = "../individuality/pallets/pgas", default-features = false }
+indiv-pallet-proof-of-ink = { path = "../individuality/pallets/proof-of-ink", default-features = false }
+indiv-pallet-relay-randomness = { path = "../individuality/pallets/relay-randomness", default-features = false }
+indiv-pallet-resources = { path = "../individuality/pallets/resources", default-features = false }
+indiv-pallet-score = { path = "../individuality/pallets/score", default-features = false }
+indiv-precompile-personhood = { path = "../individuality/precompiles/personhood", default-features = false }
+indiv-support = { path = "../individuality/support", default-features = false }
 integration-tests-helpers = { path = "integration-tests/emulated/helpers" }
 # Ring-VRF primitives. Pinned to the same revision the individuality crates above depend on so
 # that cargo unifies to a single copy.
