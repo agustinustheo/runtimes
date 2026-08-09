@@ -97,6 +97,7 @@ indiv-pallet-coinage = { path = "../individuality/pallets/coinage", default-feat
 indiv-pallet-dotns-gateway = { path = "../individuality/pallets/dotns-gateway", default-features = false }
 indiv-pallet-dummy-dim = { path = "../individuality/pallets/dummy-dim", default-features = false }
 indiv-pallet-game = { path = "../individuality/pallets/game", default-features = false }
+indiv-pallet-nft-credits = { path = "../individuality/pallets/nft-credits", default-features = false }
 indiv-pallet-honour = { path = "../individuality/pallets/honour", default-features = false }
 indiv-pallet-members = { path = "../individuality/pallets/members", default-features = false }
 indiv-pallet-members-notifier = { path = "../individuality/pallets/members-notifier", default-features = false }
