@@ -5,8 +5,9 @@ Asset Hub Polkadot, Bulletin, Web3 Storage, IPFS, the Web3 storage provider, and
 Ethereum RPC compatibility service.
 
 The tested parent branch is `individuality-integration-local-testing`. Its PreviewNet submodule
-points to commit `01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766`, published on PreviewNet branch
-`fix/current-runtimes-local-previewnet`.
+uses `git@github.com:agustinustheo/preview-net-v1.git` and points to commit
+`01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766`, published on branch
+`fix/current-runtimes-local-previewnet` in that repository.
 
 ## Prerequisites
 
@@ -41,6 +42,28 @@ If `runtimes` was cloned without submodules, initialize PreviewNet separately:
 
 ```sh
 git submodule update --init --recursive
+```
+
+For an existing checkout that previously used the upstream PreviewNet URL, synchronize it with the
+committed `.gitmodules` file before updating:
+
+```sh
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+Verify that a fresh checkout resolved the intended repository and commit:
+
+```sh
+git -C preview-net-v1 remote get-url origin
+git -C preview-net-v1 rev-parse HEAD
+```
+
+The expected output is:
+
+```text
+git@github.com:agustinustheo/preview-net-v1.git
+01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766
 ```
 
 ## 1. Install and verify Cargo 1.93.0
@@ -208,4 +231,3 @@ should exit cleanly.
 - **Genesis helper calls mention a missing Sudo pallet:** the current production relay runtime does
   not expose Sudo. Those optional core-assignment and bootstrap helpers are not required for this
   block-production smoke test; the registered parachains receive their base cores automatically.
-
