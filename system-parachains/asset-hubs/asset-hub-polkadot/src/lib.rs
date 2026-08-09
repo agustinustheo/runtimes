@@ -89,7 +89,8 @@ use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, Relaych
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::traits::EnsureOrigin;
 use governance::{
-	pallet_custom_origins, FellowshipAdmin, GeneralAdmin, StakingAdmin, Treasurer, TreasurySpender,
+	pallet_custom_origins, FellowshipAdmin, GeneralAdmin, ProsperityAdmin, StakingAdmin,
+	TechnicalMaintenance, Treasurer, TreasurySpender,
 };
 use polkadot_core_primitives::AccountIndex;
 use polkadot_runtime_constants::time::{
@@ -1283,6 +1284,11 @@ impl frame_support::traits::EnsureOriginWithArg<RuntimeOrigin, RuntimeParameters
 		match key {
 			StakingElection(_) =>
 				EitherOf::<EnsureRoot<AccountId>, StakingAdmin>::ensure_origin(origin.clone()),
+			Individuality(_) => EitherOfDiverse::<
+				individuality::RootOrFellows,
+				TechnicalMaintenance,
+			>::ensure_origin(origin.clone())
+			.map(|_| ()),
 			// technical params, can be controlled by the fellowship voice.
 			Scheduler(_) | MessageQueue(_) => EitherOfDiverse::<
 				EnsureRoot<AccountId>,
@@ -1375,6 +1381,63 @@ pub mod dynamic_params {
 		#[codec(index = 1)]
 		pub static MaxOnIdleWeight: Option<Weight> =
 			Some(Perbill::from_percent(50) * RuntimeBlockWeights::get().max_block);
+	}
+
+	/// Individuality economic and policy parameters.
+	///
+	/// The values below are read from `pallet_parameters` storage at use sites. Re-benchmark the
+	/// affected Individuality pallets in the Individuality SDK repository before release so their
+	/// weights account for those reads; do not regenerate weights in this runtime repository.
+	#[dynamic_pallet_params]
+	#[codec(index = 3)]
+	pub mod individuality {
+		/// PGAS minted to a proven person for each successful claim.
+		///
+		/// PGAS is minted for free to anyone proving personhood and pays for contract execution and
+		/// storage deposits. This value, together with the per-period claim caps, therefore sets
+		/// how much free block space and state growth a person is entitled to. Its default
+		/// derives from `ExistentialDeposit`, unlike the reference runtime, so this subsidy has
+		/// not been sized for Polkadot. TODO: double-check it for Polkadot together with
+		/// `MaxClaimsPerPeriodPerPerson`.
+		#[codec(index = 0)]
+		pub static PgasClaimAmount: Balance = 5000 * crate::individuality::PgasMinBalance::get();
+		/// Maximum PGAS claims per period for a full person.
+		#[codec(index = 1)]
+		pub static MaxClaimsPerPeriodPerPerson: u32 = 100;
+		/// Maximum PGAS claims per period for a lite person.
+		#[codec(index = 2)]
+		pub static MaxClaimsPerPeriodPerLitePerson: u32 = 40;
+		/// Maximum PGAS claim records removed by one cleanup call.
+		#[codec(index = 3)]
+		pub static MaxPgasClaimRecordCleanupPerCall: u32 = 20;
+		/// Seconds for which an alias proof remains valid.
+		#[codec(index = 4)]
+		pub static AliasProofValidityWindow: u64 = 300;
+		/// Seconds before a stale alias binding may be cleaned up.
+		#[codec(index = 5)]
+		pub static AliasCleanupGracePeriod: u64 = 3600;
+		/// Maximum weight available to one dotNS registry-contract call.
+		#[codec(index = 6)]
+		pub static DotnsMaxContractCallWeight: Weight =
+			Weight::from_parts(100_000_000_000, 2 * 1024 * 1024);
+		/// Maximum age of a dotNS attestation signature.
+		#[codec(index = 7)]
+		pub static DotnsMaxValiditySeconds: u64 = 3 * 24 * 60 * 60;
+		/// Permitted future clock skew for a dotNS attestation signature.
+		#[codec(index = 8)]
+		pub static DotnsMaxFutureSkewSeconds: u64 = 30;
+		/// Maximum allowance for anonymous full-person dotNS registration attempts.
+		#[codec(index = 9)]
+		pub static DotnsPersonRegistrationAllowanceMax: Balance = MILLICENTS;
+		/// Per-block recovery for anonymous full-person dotNS registration attempts.
+		///
+		/// The formula counts this chain's own two-second blocks through `individuality::time`, not
+		/// the six-second `async_backing::MINUTES` imported elsewhere in the runtime. Using the
+		/// latter would make the allowance recover three times too fast: once every ten minutes
+		/// rather than every thirty.
+		#[codec(index = 10)]
+		pub static DotnsPersonRegistrationAllowanceRecovery: Balance =
+			50 * CENTS / ((30 * crate::individuality::time::MINUTES) as Balance);
 	}
 }
 
@@ -2955,7 +3018,7 @@ ord_parameter_types! {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use frame_support::{assert_noop, hypothetically_ok};
+	use frame_support::{assert_noop, assert_ok, hypothetically_ok};
 	use sp_runtime::{
 		traits::{Dispatchable, Zero},
 		DispatchError,
@@ -2963,6 +3026,146 @@ mod tests {
 	use sp_weights::WeightToFee as WeightToFeeT;
 
 	type WeightToFee = DotWeightToFee<Runtime>;
+
+	#[test]
+	fn individuality_parameters_are_governance_mutable() {
+		use frame_support::traits::Get;
+		use polkadot_runtime_constants::{
+			fellowship::FELLOWS_RANK, system_parachain::COLLECTIVES_ID,
+		};
+
+		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
+			assert_eq!(
+				dynamic_params::individuality::PgasClaimAmount::get(),
+				5000 * individuality::PgasMinBalance::get(),
+			);
+			assert_noop!(
+				Parameters::set_parameter(
+					RuntimeOrigin::signed(AccountId::from([1u8; 32])),
+					RuntimeParameters::Individuality(
+						dynamic_params::individuality::Parameters::PgasClaimAmount(
+							dynamic_params::individuality::PgasClaimAmount,
+							Some(42),
+						),
+					),
+				),
+				DispatchError::BadOrigin,
+			);
+			assert_ok!(Parameters::set_parameter(
+				RuntimeOrigin::root(),
+				RuntimeParameters::Individuality(
+					dynamic_params::individuality::Parameters::PgasClaimAmount(
+						dynamic_params::individuality::PgasClaimAmount,
+						Some(42),
+					),
+				),
+			));
+			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), 42);
+
+			assert_ok!(Parameters::set_parameter(
+				RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
+					1,
+					[
+						Parachain(COLLECTIVES_ID),
+						Plurality { id: BodyId::Technical, part: BodyPart::Voice },
+						GeneralIndex(FELLOWS_RANK),
+					],
+				))),
+				RuntimeParameters::Individuality(
+					dynamic_params::individuality::Parameters::AliasProofValidityWindow(
+						dynamic_params::individuality::AliasProofValidityWindow,
+						Some(60),
+					),
+				),
+			));
+			assert_eq!(dynamic_params::individuality::AliasProofValidityWindow::get(), 60);
+		});
+	}
+
+	#[test]
+	fn technical_maintenance_can_set_individuality_parameters_only() {
+		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
+			assert_ok!(Parameters::set_parameter(
+				RuntimeOrigin::from(pallet_custom_origins::Origin::TechnicalMaintenance),
+				RuntimeParameters::Individuality(
+					dynamic_params::individuality::Parameters::PgasClaimAmount(
+						dynamic_params::individuality::PgasClaimAmount,
+						Some(42),
+					),
+				),
+			));
+			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), 42);
+
+			assert_noop!(
+				Parameters::set_parameter(
+					RuntimeOrigin::from(pallet_custom_origins::Origin::TechnicalMaintenance),
+					RuntimeParameters::StakingElection(
+						dynamic_params::staking_election::Parameters::SignedPhase(
+							dynamic_params::staking_election::SignedPhase,
+							Some(42),
+						),
+					),
+				),
+				DispatchError::BadOrigin,
+			);
+		});
+	}
+
+	#[test]
+	fn individuality_dynamic_parameter_bounds_are_stored() {
+		use frame_support::traits::Get;
+
+		macro_rules! set_individuality_parameter {
+			($name:ident, $value:expr) => {
+				assert_ok!(Parameters::set_parameter(
+					RuntimeOrigin::root(),
+					RuntimeParameters::Individuality(
+						dynamic_params::individuality::Parameters::$name(
+							dynamic_params::individuality::$name,
+							Some($value),
+						)
+					),
+				));
+			};
+		}
+
+		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
+			set_individuality_parameter!(PgasClaimAmount, Balance::MAX);
+			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), Balance::MAX);
+			set_individuality_parameter!(MaxClaimsPerPeriodPerPerson, u32::MAX);
+			assert_eq!(dynamic_params::individuality::MaxClaimsPerPeriodPerPerson::get(), u32::MAX);
+			set_individuality_parameter!(MaxClaimsPerPeriodPerLitePerson, 0u32);
+			assert_eq!(dynamic_params::individuality::MaxClaimsPerPeriodPerLitePerson::get(), 0);
+			set_individuality_parameter!(MaxPgasClaimRecordCleanupPerCall, u32::MAX);
+			assert_eq!(
+				dynamic_params::individuality::MaxPgasClaimRecordCleanupPerCall::get(),
+				u32::MAX,
+			);
+			set_individuality_parameter!(AliasProofValidityWindow, u64::MAX);
+			assert_eq!(dynamic_params::individuality::AliasProofValidityWindow::get(), u64::MAX);
+			set_individuality_parameter!(AliasCleanupGracePeriod, 0u64);
+			assert_eq!(dynamic_params::individuality::AliasCleanupGracePeriod::get(), 0);
+			set_individuality_parameter!(DotnsMaxContractCallWeight, Weight::MAX);
+			assert_eq!(
+				dynamic_params::individuality::DotnsMaxContractCallWeight::get(),
+				Weight::MAX
+			);
+			set_individuality_parameter!(DotnsMaxValiditySeconds, u64::MAX);
+			assert_eq!(dynamic_params::individuality::DotnsMaxValiditySeconds::get(), u64::MAX);
+			set_individuality_parameter!(DotnsMaxFutureSkewSeconds, 0u64);
+			assert_eq!(dynamic_params::individuality::DotnsMaxFutureSkewSeconds::get(), 0);
+			set_individuality_parameter!(DotnsPersonRegistrationAllowanceMax, Balance::MAX);
+			assert_eq!(
+				dynamic_params::individuality::DotnsPersonRegistrationAllowanceMax::get(),
+				Balance::MAX,
+			);
+			set_individuality_parameter!(DotnsPersonRegistrationAllowanceRecovery, 0);
+			assert_eq!(
+				dynamic_params::individuality::DotnsPersonRegistrationAllowanceRecovery::get(),
+				0,
+			);
+		});
+	}
 
 	/// The transaction extension pipeline is versioned: version 0 is the pipeline that predates the
 	/// Individuality deployment and must stay frozen so already-built signers keep working, while

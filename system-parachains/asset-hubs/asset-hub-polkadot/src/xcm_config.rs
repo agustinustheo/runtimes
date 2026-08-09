@@ -20,20 +20,18 @@ use super::{
 	treasury, AccountId, AllExceptReapStash, AllPalletsWithSystem, AssetConversion, Assets,
 	Balance, Balances, DotWeightToFee as WeightToFee, FellowshipAdmin, ForeignAssets, GeneralAdmin,
 	NativeAndAssets, ParachainInfo, ParachainSystem, PolkadotXcm, PoolAssets,
-	PriceForParentDelivery, Runtime, RuntimeCall, RuntimeEvent, RuntimeHoldReason, RuntimeOrigin,
-	StakingAdmin, ToKusamaXcmRouter, Treasurer, XcmpQueue,
+	PriceForParentDelivery, ProsperityAdmin, Runtime, RuntimeCall, RuntimeEvent, RuntimeHoldReason,
+	RuntimeOrigin, StakingAdmin, TechnicalMaintenance, ToKusamaXcmRouter, Treasurer, XcmpQueue,
 };
 use alloc::{collections::BTreeSet, vec, vec::Vec};
 use assets_common::{
 	matching::{
 		FromNetwork, IsForeignConcreteAsset, NonTeleportableAssetFromTrustedReserve,
-		ParentLocation, TeleportableAssetWithTrustedReserve,
+		ParentLocation, RemoteAssetFromLocation, TeleportableAssetWithTrustedReserve,
 	},
 	TrustBackedAssetsAsLocation,
 };
-use core::marker::PhantomData;
 use frame_support::{
-	pallet_prelude::Get,
 	parameter_types,
 	traits::{
 		fungible::HoldConsideration,
@@ -51,7 +49,7 @@ use polkadot_parachain_primitives::primitives::Sibling;
 use polkadot_runtime_constants::{
 	fellowship::{IsFellowshipVoice, ARCHITECTS_RANK},
 	system_parachain,
-	xcm::body::FELLOWSHIP_ADMIN_INDEX,
+	xcm::body::{FELLOWSHIP_ADMIN_INDEX, PROSPERITY_ADMIN_INDEX, TECHNICAL_MAINTENANCE_INDEX},
 };
 use snowbridge_outbound_queue_primitives::v2::exporter::PausableExporter;
 use sp_runtime::traits::TryConvertInto;
@@ -532,6 +530,10 @@ parameter_types! {
 	pub const FellowshipAdminBodyId: BodyId = BodyId::Index(FELLOWSHIP_ADMIN_INDEX);
 	// `Treasurer` pluralistic body.
 	pub const TreasurerBodyId: BodyId = BodyId::Treasury;
+	// `TechnicalMaintenance` pluralistic body.
+	pub const TechnicalMaintenanceBodyId: BodyId = BodyId::Index(TECHNICAL_MAINTENANCE_INDEX);
+	// `ProsperityAdmin` pluralistic body.
+	pub const ProsperityAdminBodyId: BodyId = BodyId::Index(PROSPERITY_ADMIN_INDEX);
 }
 
 /// Type to convert the `GeneralAdmin` origin to a Plurality `Location` value.
@@ -549,6 +551,14 @@ pub type FellowshipAdminToPlurality =
 /// Type to convert the `Treasurer` origin to a Plurality `Location` value.
 pub type TreasurerToPlurality = OriginToPluralityVoice<RuntimeOrigin, Treasurer, TreasurerBodyId>;
 
+/// Type to convert the `TechnicalMaintenance` origin to a Plurality `Location` value.
+pub type TechnicalMaintenanceToPlurality =
+	OriginToPluralityVoice<RuntimeOrigin, TechnicalMaintenance, TechnicalMaintenanceBodyId>;
+
+/// Type to convert the `ProsperityAdmin` origin to a Plurality `Location` value.
+pub type ProsperityAdminToPlurality =
+	OriginToPluralityVoice<RuntimeOrigin, ProsperityAdmin, ProsperityAdminBodyId>;
+
 /// Converts a local signed origin into an XCM `Location`.
 /// Forms the basis for local origins sending/executing XCMs.
 pub type LocalSignedOriginToLocation = SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>;
@@ -564,6 +574,11 @@ pub type LocalPalletOrSignedOriginToLocation = (
 	FellowshipAdminToPlurality,
 	// `Treasurer` origin to be used in XCM as a corresponding Plurality `Location` value.
 	TreasurerToPlurality,
+	// `TechnicalMaintenance` origin to be used in XCM as a corresponding Plurality `Location`
+	// value.
+	TechnicalMaintenanceToPlurality,
+	// `ProsperityAdmin` origin to be used in XCM as a corresponding Plurality `Location` value.
+	ProsperityAdminToPlurality,
 	// And a usual Signed origin to be used in XCM as a corresponding `AccountId32`.
 	SignedToAccountId32<RuntimeOrigin, AccountId, RelayNetwork>,
 );
@@ -737,54 +752,6 @@ pub mod bridging {
 		/// Allow any asset native to the Kusama ecosystem if it comes from Kusama Asset Hub.
 		pub type KusamaAssetFromAssetHubKusama =
 			RemoteAssetFromLocation<StartsWith<KsmLocation>, AssetHubKusama>;
-
-		// TODO: get this from `assets_common v0.17.1` when SDK deps are upgraded
-		/// Accept an asset if it is native to `AssetsAllowedNetworks` and it is coming from
-		/// `OriginLocation`.
-		pub struct RemoteAssetFromLocation<AssetsAllowedNetworks, OriginLocation>(
-			PhantomData<(AssetsAllowedNetworks, OriginLocation)>,
-		);
-		impl<
-				L: TryInto<Location> + Clone,
-				AssetsAllowedNetworks: Contains<Location>,
-				OriginLocation: Get<Location>,
-			> ContainsPair<L, L> for RemoteAssetFromLocation<AssetsAllowedNetworks, OriginLocation>
-		{
-			fn contains(asset: &L, origin: &L) -> bool {
-				let Ok(asset) = asset.clone().try_into() else {
-					return false;
-				};
-				let Ok(origin) = origin.clone().try_into() else {
-					return false;
-				};
-
-				let expected_origin = OriginLocation::get();
-				// ensure `origin` is expected `OriginLocation`
-				if !expected_origin.eq(&origin) {
-					log::trace!(
-						target: "xcm::contains",
-						"RemoteAssetFromLocation asset: {asset:?}, origin: {origin:?} is not from expected {expected_origin:?}"
-					);
-					return false;
-				} else {
-					log::trace!(
-						target: "xcm::contains",
-						"RemoteAssetFromLocation asset: {asset:?}, origin: {origin:?}",
-					);
-				}
-
-				// ensure `asset` is from remote consensus listed in `AssetsAllowedNetworks`
-				AssetsAllowedNetworks::contains(&asset)
-			}
-		}
-		impl<AssetsAllowedNetworks: Contains<Location>, OriginLocation: Get<Location>>
-			ContainsPair<Asset, Location>
-			for RemoteAssetFromLocation<AssetsAllowedNetworks, OriginLocation>
-		{
-			fn contains(asset: &Asset, origin: &Location) -> bool {
-				<Self as ContainsPair<Location, Location>>::contains(&asset.id.0, origin)
-			}
-		}
 	}
 
 	pub mod to_ethereum {

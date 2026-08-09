@@ -3023,8 +3023,13 @@ dependencies = [
  "bulletin-polkadot-runtime",
  "emulated-integration-tests-common",
  "frame-support",
+ "indiv-pallet-resources",
+ "indiv-support",
  "integration-tests-helpers",
+ "pallet-message-queue",
+ "pallet-xcm",
  "parachains-common",
+ "people-polkadot-runtime",
  "polkadot-system-emulated-network",
  "staging-xcm",
  "staging-xcm-executor",
@@ -7555,6 +7560,7 @@ dependencies = [
 name = "indiv-pallet-game"
 version = "0.1.0"
 dependencies = [
+ "binary-merkle-tree",
  "cumulus-pallet-parachain-system",
  "cumulus-primitives-core",
  "frame-benchmarking",
@@ -10592,6 +10598,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-ct-migrator"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+]
+
+[[package]]
 name = "pallet-dap"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11489,6 +11505,17 @@ dependencies = [
  "staging-xcm",
  "staging-xcm-builder",
  "staging-xcm-executor",
+]
+
+[[package]]
+name = "pallet-rc2-migrator"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "polkadot-parachain-primitives",
+ "scale-info",
 ]
 
 [[package]]
@@ -12675,6 +12702,7 @@ dependencies = [
 name = "people-polkadot-runtime"
 version = "1.0.0"
 dependencies = [
+ "asset-hub-polkadot-runtime",
  "assets-common",
  "cumulus-pallet-aura-ext",
  "cumulus-pallet-parachain-system",
@@ -13107,7 +13135,6 @@ dependencies = [
  "polkadot-runtime-common",
  "polkadot-runtime-constants",
  "polkadot-runtime-parachains",
- "relay-common",
  "scale-info",
  "separator",
  "serde_json",
@@ -14359,15 +14386,6 @@ name = "regex-syntax"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
-
-[[package]]
-name = "relay-common"
-version = "1.0.0"
-dependencies = [
- "pallet-staking-reward-fn",
- "polkadot-primitives",
- "sp-runtime 47.0.0",
-]
 
 [[package]]
 name = "reqwest"
@@ -18663,7 +18681,6 @@ dependencies = [
  "polkadot-primitives",
  "polkadot-runtime-common",
  "polkadot-runtime-parachains",
- "relay-common",
  "scale-info",
  "separator",
  "serde_json",

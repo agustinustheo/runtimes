@@ -58,7 +58,9 @@ use parachains_common::{
 };
 
 use polkadot_runtime_common::{BlockHashCount, SlowAdjustingFeeUpdate};
-use polkadot_runtime_constants::fellowship::IsFellowshipVoice;
+use polkadot_runtime_constants::{
+	fellowship::IsFellowshipVoice, xcm::body::TECHNICAL_MAINTENANCE_INDEX,
+};
 use sp_api::impl_runtime_apis;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -74,15 +76,6 @@ pub use sp_runtime::{MultiAddress, Perbill, Permill};
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
-// The block weight comes from `async_backing` (2s of ref time, 85% normal dispatch ratio), matching
-// Asset Hub Polkadot, which runs the identical `elastic_scaling` consensus config below.
-//
-// This chain previously paired that config with `parachains_common`'s pre-async-backing pair
-// (0.5s, 75%), which was a leftover from the switch to elastic scaling rather than a deliberately
-// conservative choice: at 3 blocks per 6s relay slot it granted 1.5s of compute per 6s, i.e. *less*
-// total throughput than a plain async-backing chain gets from one 2s block, at triple the block
-// production cost. Each of these 2s blocks is validated on its own core, so it may use a full
-// core's 2s PVF execution budget.
 use system_parachains_constants::{
 	async_backing::{AVERAGE_ON_INITIALIZE_RATIO, MAXIMUM_BLOCK_WEIGHT, NORMAL_DISPATCH_RATIO},
 	polkadot::{
@@ -488,6 +481,8 @@ parameter_types! {
 	pub const SessionLength: BlockNumber = 6 * HOURS;
 	// StakingAdmin pluralistic body.
 	pub const StakingAdminBodyId: BodyId = BodyId::Defense;
+	/// TechnicalMaintenance pluralistic body (governance track on Asset Hub).
+	pub const TechnicalMaintenanceBodyId: BodyId = BodyId::Index(TECHNICAL_MAINTENANCE_INDEX);
 }
 
 /// We allow Root and the `StakingAdmin` to execute privileged collator selection operations.
@@ -1361,9 +1356,30 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl indiv_pallet_game::runtime_api::PalletGameApi<Block, Balance> for Runtime {
+	impl indiv_pallet_game::runtime_api::PalletGameApi<Block, Balance, AccountId, BlockNumber> for Runtime {
 		fn play_deposit() -> Balance {
 			indiv_pallet_game::PlayDepositAmount::<Runtime>::get()
+		}
+
+		fn nft_claim_credit_roots(
+			claimant: indiv_pallet_score::AccountOrPerson<AccountId>,
+		) -> Vec<(BlockNumber, indiv_pallet_game::NftClaimCreditRoot)> {
+			Game::nft_claim_credit_roots(&claimant)
+		}
+
+		fn nft_claim_credit_proofs(
+			award_block: BlockNumber,
+			claimant: indiv_pallet_score::AccountOrPerson<AccountId>,
+		) -> Result<Vec<indiv_pallet_game::NftClaimCreditProof>, indiv_pallet_game::NftClaimCreditProofError> {
+			Game::nft_claim_credit_proofs(award_block, &claimant)
+		}
+
+		fn nft_claim_credit_proof_from_awards(
+			award_block: BlockNumber,
+			awards: Vec<indiv_pallet_game::NftClaimCreditAward<AccountId>>,
+			leaf_index: u32,
+		) -> Result<indiv_pallet_game::NftClaimCreditProof, indiv_pallet_game::NftClaimCreditProofError> {
+			Game::nft_claim_credit_proof_from_awards(award_block, awards, leaf_index)
 		}
 	}
 

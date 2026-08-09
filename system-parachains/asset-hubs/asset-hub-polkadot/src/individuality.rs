@@ -66,9 +66,11 @@
 //! 3. `DotnsGateway::set_dispatcher_address` (root) — point the gateway at the deployed
 //!    `RootGatewayDispatcher` contract. `pallet-dotns-gateway` cannot register any name until this
 //!    is set, so the dotNS registry contract has to be deployed first.
+//! 4. `AliasAccounts::set_alias_fee` (Fellowship or root) — configure the asset and amount charged
+//!    for alias registration before enabling account-alias flows.
 //!
-//! Optional, per-provider: `DotnsGateway::set_attestation_allowance` (root) to admit an attestation
-//! provider.
+//! Optional, per-provider: `DotnsGateway::set_attestation_allowance` (Fellowship or root) to admit
+//! an attestation provider.
 
 use super::*;
 
@@ -76,7 +78,7 @@ use frame_support::traits::{ContainsPair, EnsureOrigin};
 use indiv_support::traits::{Alias, RingExponent};
 #[cfg(feature = "runtime-benchmarks")]
 use indiv_support::traits::{Context, Identifier, RingIndex};
-use polkadot_runtime_constants::system_parachain::PEOPLE_ID;
+use polkadot_runtime_constants::system_parachain::{ASSET_HUB_ID, PEOPLE_ID};
 use sp_runtime::traits::AccountIdConversion;
 
 /// Wall-clock durations expressed in block numbers.
@@ -100,6 +102,10 @@ pub mod time {
 	pub const DAYS: BlockNumber = HOURS * 24;
 }
 
+/// Root or the Technical Fellowship voice on Collectives may administer Individuality settings.
+pub type RootOrFellows =
+	EitherOfDiverse<EnsureRoot<AccountId>, EnsureXcm<IsFellowshipVoice<FellowshipLocation>>>;
+
 /// PGAS, the non-transferable gas allowance a proven person may claim.
 ///
 /// The id sits far above the `AutoIncAssetId` range so that it can never collide with a
@@ -119,7 +125,7 @@ parameter_types! {
 			// Matches the `MembersNotifier` index in People Polkadot's `construct_runtime!`.
 			pallet_index: 69,
 		};
-	pub MembersSubscriberSelfParaId: u32 = parachain_info::Pallet::<Runtime>::parachain_id().into();
+	pub const MembersSubscriberSelfParaId: u32 = ASSET_HUB_ID;
 
 	/// Ring exponent of the people collection on People Polkadot. Must match
 	/// `MembersFlexibleRingExponent` there, or proofs will not verify.
@@ -172,15 +178,15 @@ impl indiv_pallet_alias_accounts::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_alias_accounts::WeightInfo<Runtime>;
 	type MemberService = MembersSubscriber;
 	type UnixTime = Timestamp;
-	/// A proof is accepted for five minutes after the timestamp it commits to.
-	type ProofValidityWindow = ConstU64<300>;
-	/// An hour of grace before a released alias binding can be cleaned up.
-	type CleanupGracePeriod = ConstU64<3600>;
+	/// The default proof-validity window is five minutes after the timestamp it commits to.
+	type ProofValidityWindow = dynamic_params::individuality::AliasProofValidityWindow;
+	/// The default cleanup grace period for a released alias binding is one hour.
+	type CleanupGracePeriod = dynamic_params::individuality::AliasCleanupGracePeriod;
 	type PeopleLiteRingExponent = PeopleLiteRingExponent;
 	type PeopleRingExponent = PeopleRingExponent;
 	type Fungibles = Assets;
 	type PgasAssetId = PgasAssetId;
-	type FeeManagerOrigin = EnsureRoot<AccountId>;
+	type FeeManagerOrigin = RootOrFellows;
 }
 
 impl indiv_precompile_personhood::Config for Runtime {
@@ -195,15 +201,6 @@ parameter_types! {
 	pub PgasAdmin: AccountId = PgasPalletId::get().into_account_truncating();
 	pub PgasAssetId: AssetIdForTrustBackedAssets = PGAS_ASSET_ID;
 	pub PgasMinBalance: Balance = ExistentialDeposit::get() / 10;
-	/// How much PGAS a person receives per claim.
-	///
-	/// TODO: double-check this for Polkadot, together with `MaxClaimsPerPeriodPerPerson` below.
-	/// PGAS is minted for free to anyone who can prove personhood and pays for contract execution
-	/// and storage deposits, so this constant and the per-period claim caps together set how much
-	/// free block space and state growth a proven person is entitled to. It is derived from
-	/// `ExistentialDeposit`, which differs between this chain and the reference runtime, so the
-	/// resulting subsidy has not been sized for Polkadot.
-	pub PgasClaimAmount: Balance = 5000 * PgasMinBalance::get();
 }
 
 impl indiv_pallet_pgas::Config for Runtime {
@@ -212,42 +209,22 @@ impl indiv_pallet_pgas::Config for Runtime {
 	type Clock = Timestamp;
 	type Fungibles = Assets;
 	type PgasAssetId = PgasAssetId;
-	type PgasClaimAmount = PgasClaimAmount;
-	type MaxClaimsPerPeriodPerPerson = ConstU32<100>;
-	type MaxClaimsPerPeriodPerLitePerson = ConstU32<40>;
-	type MaxPgasClaimRecordCleanupPerCall = ConstU32<20>;
+	type PgasClaimAmount = dynamic_params::individuality::PgasClaimAmount;
+	type MaxClaimsPerPeriodPerPerson = dynamic_params::individuality::MaxClaimsPerPeriodPerPerson;
+	type MaxClaimsPerPeriodPerLitePerson =
+		dynamic_params::individuality::MaxClaimsPerPeriodPerLitePerson;
+	type MaxPgasClaimRecordCleanupPerCall =
+		dynamic_params::individuality::MaxPgasClaimRecordCleanupPerCall;
 	type PgasAdmin = PgasAdmin;
 	type PgasMinBalance = PgasMinBalance;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::PgasBenchHelper;
 }
 
-/// Calls that PGAS may pay the fee for.
-///
-/// PGAS is claimed for free by anyone who can prove personhood, so it must not be spendable on
-/// anything that competes for block space with fee-paying traffic beyond contract execution, which
-/// is what it exists for.
-pub struct PGASCallFilter;
-impl frame_support::traits::Contains<RuntimeCall> for PGASCallFilter {
-	fn contains(call: &RuntimeCall) -> bool {
-		match call {
-			RuntimeCall::Revive(..) => true,
-			RuntimeCall::Utility(pallet_utility::Call::batch { calls }) |
-			RuntimeCall::Utility(pallet_utility::Call::batch_all { calls }) |
-			RuntimeCall::Utility(pallet_utility::Call::force_batch { calls }) =>
-				calls.iter().all(|inner_call| matches!(inner_call, RuntimeCall::Revive(..))),
-			_ => false,
-		}
-	}
-}
-
 impl pallet_pgas_allowance::Config for Runtime {
 	type Assets = Assets;
 	type PGASAssetId = PgasAssetId;
-	// The benchmarks charge PGAS for a plain `remark`, so they need a filter that accepts it.
-	#[cfg(not(feature = "runtime-benchmarks"))]
-	type CallFilter = PGASCallFilter;
-	#[cfg(feature = "runtime-benchmarks")]
+	// PGAS is a general Asset Hub fee asset, so every RuntimeCall may be paid with it.
 	type CallFilter = frame_support::traits::Everything;
 	type WeightInfo = weights::pallet_pgas_allowance::WeightInfo<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
@@ -279,7 +256,7 @@ impl indiv_pallet_dotns_gateway::ContractCaller for ReviveContractCaller {
 			dest,
 			value.into(),
 			TransactionLimits::WeightAndDeposit {
-				weight_limit: DotnsMaxContractCallWeight::get(),
+				weight_limit: dynamic_params::individuality::DotnsMaxContractCallWeight::get(),
 				// The root origin does not pay the deposit cost; per-call storage growth is bounded
 				// by `weight_limit.proof_size`.
 				deposit_limit: u128::MAX,
@@ -298,42 +275,23 @@ impl indiv_pallet_dotns_gateway::ContractCaller for ReviveContractCaller {
 	}
 }
 
-parameter_types! {
-	/// On-chain measured weight is below this, so this leaves some margin.
-	pub const DotnsMaxContractCallWeight: Weight =
-		Weight::from_parts(100_000_000_000, 2 * 1024 * 1024);
-	pub const DotnsMaxValiditySeconds: u64 = 3 * 24 * 60 * 60; // 3 days
-	pub const DotnsMaxFutureSkewSeconds: u64 = 30;
-}
-
 impl indiv_pallet_dotns_gateway::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_dotns_gateway::WeightInfo<Runtime>;
 	type MemberService = MembersSubscriber;
 	type ContractCaller = ReviveContractCaller;
 	type AddressMapper = ReviveAddressMapper;
-	type MaxContractCallWeight = DotnsMaxContractCallWeight;
-	type MaxValiditySeconds = DotnsMaxValiditySeconds;
-	type MaxFutureSkewSeconds = DotnsMaxFutureSkewSeconds;
+	type MaxContractCallWeight = dynamic_params::individuality::DotnsMaxContractCallWeight;
+	type MaxValiditySeconds = dynamic_params::individuality::DotnsMaxValiditySeconds;
+	type MaxFutureSkewSeconds = dynamic_params::individuality::DotnsMaxFutureSkewSeconds;
 	type UnixTime = Timestamp;
-	type AttestationAllowanceManager = EnsureRoot<AccountId>;
+	type AttestationAllowanceManager = RootOrFellows;
+	// This controls the RootGateway dispatcher contract, rather than an Individuality allowance;
+	// retain root until its governance surface has its own explicit review.
 	type DispatcherAddressManager = EnsureRoot<AccountId>;
 	type AttestationSignature = Signature;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::DotnsGatewayBenchHelper;
 }
-
-/// A deliberately tiny allowance: any non-trivial extrinsic fee exhausts it, so every
-/// `register_name` attempt relies on [`OperationAllowedOneTimeExcess`] to be admitted at all, and
-/// then locks the alias out until recovery brings its usage back to zero.
-const DOTNS_PERSON_REGISTRATION_ALLOWANCE_MAX: Balance = MILLICENTS;
-/// Recover enough that a failed name registration can be retried in about 30 minutes. The 50 CENTS
-/// figure comes from the measured weight of the call.
-///
-/// Counted in this chain's own 2s blocks via [`time`], not the 6s `async_backing::MINUTES` the rest
-/// of the runtime imports — the latter would make the allowance recover three times too fast, i.e.
-/// permit a retry every 10 minutes.
-const DOTNS_PERSON_REGISTRATION_ALLOWANCE_RECOVERY: Balance =
-	50 * CENTS / ((30 * time::MINUTES) as Balance);
 
 /// The anonymous origins this runtime rate-limits, and the key their allowance is tracked under.
 #[derive(
@@ -358,8 +316,10 @@ impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> fo
 		match self {
 			RestrictedEntity::DotnsPersonRegistration(_) =>
 				indiv_pallet_origin_restriction::Allowance {
-					max: DOTNS_PERSON_REGISTRATION_ALLOWANCE_MAX,
-					recovery_per_block: DOTNS_PERSON_REGISTRATION_ALLOWANCE_RECOVERY,
+					max: dynamic_params::individuality::DotnsPersonRegistrationAllowanceMax::get(),
+					recovery_per_block:
+						dynamic_params::individuality::DotnsPersonRegistrationAllowanceRecovery::get(
+						),
 				},
 		}
 	}
@@ -446,8 +406,14 @@ pub mod benchmark_utils {
 
 	/// Builds a one-member Bandersnatch ring and returns everything needed to both seed its root
 	/// and prove membership of it.
+	///
+	/// This mirrors `ring_setup` in Individuality's
+	/// `runtimes/next-asset-hub-paseo/src/lib.rs`. `indiv_support::crypto` does not export the
+	/// benchmark helper at this pinned revision; keep this single local mirror in sync with review
+	/// r3734171704 until the SDK exports it.
 	fn ring_setup(
 		ring_exponent: RingExponent,
+		entropy: [u8; 32],
 	) -> (
 		<Crypto as GenerateVerifiable>::Members,
 		<Crypto as GenerateVerifiable>::Member,
@@ -458,7 +424,7 @@ pub mod benchmark_utils {
 			ring_exponent.try_into().expect("RingExponent maps to RingDomainSize");
 		let chunks = ring_verifier_builder_params::<BandersnatchSuite>(domain);
 
-		let secret = Crypto::new_secret([42u8; 32]);
+		let secret = Crypto::new_secret(entropy);
 		let member = Crypto::member_from_secret(&secret);
 
 		let mut intermediate = Crypto::start_members(domain);
@@ -499,18 +465,11 @@ pub mod benchmark_utils {
 		}
 
 		fn mock_ring_root(seed: u32) -> indiv_pallet_members_subscriber::types::MembersOf<Runtime> {
-			let domain = RingDomainSize::Domain11;
-			let chunks = ring_verifier_builder_params::<BandersnatchSuite>(domain);
-
-			let secret = Crypto::new_secret(alias_bench_entropy(seed));
-			let member = Crypto::member_from_secret(&secret);
-
-			let mut intermediate = Crypto::start_members(domain);
-			Crypto::push_members(&mut intermediate, core::iter::once(member), |range| {
-				Ok(chunks[range].to_vec())
-			})
-			.expect("benchmark: push_members for a single member");
-			Crypto::finish_members(intermediate)
+			ring_setup(
+				<Runtime as indiv_pallet_alias_accounts::Config>::PeopleRingExponent::get(),
+				alias_bench_entropy(seed),
+			)
+			.0
 		}
 	}
 
@@ -528,12 +487,12 @@ pub mod benchmark_utils {
 			context: Context,
 			msg: &[u8],
 		) -> (indiv_pallet_alias_accounts::ProofOf<Runtime>, Alias) {
-			let secret = Crypto::new_secret(alias_bench_entropy(seed));
-			let member = Crypto::member_from_secret(&secret);
-
-			let commitment =
-				Crypto::open(RingDomainSize::Domain11, &member, core::iter::once(member))
-					.expect("benchmark: open for a single-member ring");
+			let (_root, member, secret, domain) = ring_setup(
+				<Runtime as indiv_pallet_alias_accounts::Config>::PeopleRingExponent::get(),
+				alias_bench_entropy(seed),
+			);
+			let commitment = Crypto::open(domain, &member, core::iter::once(member))
+				.expect("benchmark: open for a single-member ring");
 			Crypto::create(commitment, &secret, &context[..], msg)
 				.expect("benchmark: create for a valid commitment")
 		}
@@ -548,7 +507,7 @@ pub mod benchmark_utils {
 			message: &[u8],
 		) -> indiv_pallet_alias_accounts::ProofOf<Runtime> {
 			let ring_exponent = ring_exponent_for(identifier);
-			let (root, member, secret, domain) = ring_setup(ring_exponent);
+			let (root, member, secret, domain) = ring_setup(ring_exponent, [42u8; 32]);
 
 			// The benchmark fills the sliding window with mock records before calling us; replace
 			// the record matching `revision` with our real commitment so verification against
@@ -632,18 +591,8 @@ pub mod benchmark_utils {
 			context: &Context,
 			message: &[u8],
 		) -> indiv_pallet_pgas::ProofOf<Runtime> {
-			let domain = RingDomainSize::Domain11;
-			let chunks = ring_verifier_builder_params::<BandersnatchSuite>(domain);
-
-			let secret = Crypto::new_secret([42u8; 32]);
-			let member = Crypto::member_from_secret(&secret);
-
-			let mut intermediate = Crypto::start_members(domain);
-			Crypto::push_members(&mut intermediate, core::iter::once(member), |range| {
-				Ok(chunks[range].to_vec())
-			})
-			.expect("benchmark: push_members for a single member");
-			let root = Crypto::finish_members(intermediate);
+			let ring_exponent = ring_exponent_for(identifier);
+			let (root, member, secret, domain) = ring_setup(ring_exponent, [42u8; 32]);
 
 			let record = indiv_pallet_members_subscriber::types::RingCommitmentRecord::<Runtime> {
 				root,
@@ -660,7 +609,7 @@ pub mod benchmark_utils {
 			);
 			indiv_pallet_members_subscriber::RingCollectionExponents::<Runtime>::insert(
 				*identifier,
-				RingExponent::R2e9,
+				ring_exponent,
 			);
 
 			let commitment = Crypto::open(domain, &member, core::iter::once(member))
@@ -726,7 +675,7 @@ pub mod benchmark_utils {
 	{
 		fn setup_ring_root(identifier: &Identifier, ring_index: RingIndex) -> RevisionIndex {
 			let ring_exponent = ring_exponent_for(identifier);
-			let real_root = ring_setup(ring_exponent).0;
+			let real_root = ring_setup(ring_exponent, [42u8; 32]).0;
 
 			// Fill the sliding window to capacity for the worst-case `verify_membership` iteration.
 			let now = <Timestamp as UnixTime>::now().as_secs();
@@ -771,7 +720,7 @@ pub mod benchmark_utils {
 			} else {
 				<Runtime as indiv_pallet_alias_accounts::Config>::PeopleRingExponent::get()
 			};
-			let (_root, member, secret, domain) = ring_setup(ring_exponent);
+			let (_root, member, secret, domain) = ring_setup(ring_exponent, [42u8; 32]);
 			let commitment = Crypto::open(domain, &member, core::iter::once(member))
 				.expect("benchmark: open for a single-member ring");
 			let (proof, _alias) = Crypto::create(

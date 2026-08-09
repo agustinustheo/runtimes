@@ -21,10 +21,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `pallet-pgas` lets a proven person claim PGAS (a new non-transferable allowance asset, id `2_000_000_000`); `pallet-pgas-allowance` lets PGAS pay the fees of contract calls, and `pallet_revive::PGasDeposit` makes contract storage deposits PGAS-denominated, so a proven person needs no DOT to use contracts. `pallet-assets-freezer` and `pallet-assets-holder` are added on the `Assets` (trust-backed) instance to support this, and `pallet_revive::migrations::v4::Migration` converts the storage deposits of contracts that already exist — it must ship in the same upgrade.
   - `pallet-dotns-gateway` is the personhood-gated front door to the dotNS name registry, with `pallet-origin-restriction` rate-limiting the anonymous origins it produces.
   - The Individuality origin modifiers, `RestrictOrigin` and the `ChargePGAS` payment wrapper are added as a **new transaction extension version 1** (`TxExtensionV1`). Version 0 is unchanged — Ethereum transactions and legacy signed transactions keep using it — so `transaction_version` does not move.
+- People Polkadot: make Individuality statement-store and Bulletin long-term-storage limits, including the Bulletin destination and `pallet-transaction-storage` target index, governance-adjustable through `pallet-parameters` (Fellowship or root) ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
+- Asset Hub Polkadot: make Individuality PGAS claim economics, alias-account windows, and dotNS gateway limits governance-adjustable through `pallet-parameters` (Fellowship or root) ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
+- Asset Hub Polkadot: add the `technical_maintenance` OpenGov track for operational settings such as quotas, allowances, limits and fees, and the `prosperity_admin` track for guarding the Prosperity monetary mechanisms (PSM, coinage) ([#1236](https://github.com/polkadot-fellows/runtimes/pull/1236)).
 
 ### Changed
 
-- People Polkadot: raise the block weight limit to the `async_backing` constants (2s of ref time, 85% normal dispatch ratio) from `parachains_common`'s pre-async-backing pair (0.5s, 75%). This chain already authors a block every 2s under `elastic_scaling` consensus, and each block is validated on its own core, so it may use a full core's PVF execution budget — Asset Hub Polkadot runs the identical consensus config and is already configured this way. The old pairing was a leftover from the elastic-scaling switch rather than a conservative choice: at 3 blocks per 6s relay slot it granted 1.5s of compute per 6s, less total throughput than a plain async-backing chain, at triple the block production cost.
+- People Polkadot: raise the block weight limit to the `async_backing` constants (2s of ref time, 85% normal dispatch ratio) from `parachains_common`'s pre-async-backing pair (0.5s, 75%). This chain already authors a block every 2s under `elastic_scaling` consensus. This matches Asset Hub Polkadot's block-weight configuration.
+
+### Fixed
+
+- Asset Hub Polkadot & Kusama: fix `pallet-remote-proxy` dropping the newest relay storage root when multiple parachain blocks share one relay parent. `on_validation_data` now skips storing duplicate relay blocks, which used to fill the bounded `BlockToRoot` vector with copies too young to prune and silently drop the newest root, so remote-proxy proofs anchored at recent relay blocks no longer fail with `UnknownProofAnchorBlock` ([#1230](https://github.com/polkadot-fellows/runtimes/issues/1230)).
+- Asset Hub Polkadot: suspend `NextAssetId` while the PGAS migration creates its fixed-id asset, so `force_create` accepts it and the auto-increment sequence resumes unchanged.
 
 ## [2.3.2] 23.07.2026
 
