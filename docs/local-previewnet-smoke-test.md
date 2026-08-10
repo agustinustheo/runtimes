@@ -13,7 +13,8 @@ The validated revisions are:
 
 - runtimes integration head: `18a7466ea0a4134a6605c84e35af4958103bf732`
 - compatible Individuality SDK: `4fca4f8391f1e38898cfb0803db4da5cb25db9e3`
-- PreviewNet: `01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766`
+- PreviewNet: `01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766` on canonical branch
+  `theo/current-runtimes-local-previewnet`
 
 The `individuality-integration-local-testing` branch is a fork-only review surface. Its
 `.gitmodules`, `preview-net-v1` gitlink, and `rust-toolchain.toml` must not be merged into
@@ -21,7 +22,7 @@ The `individuality-integration-local-testing` branch is a fork-only review surfa
 
 ## Prerequisites
 
-- Git
+- Git with SSH access to GitHub
 - Rustup
 - Node.js and pnpm
 - GNU Make, jq, and curl
@@ -73,7 +74,7 @@ git -C preview-net-v1 rev-parse HEAD
 The expected output is:
 
 ```text
-https://github.com/agustinustheo/preview-net-v1.git
+git@github.com:paritytech/preview-net-v1.git
 01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766
 ```
 
