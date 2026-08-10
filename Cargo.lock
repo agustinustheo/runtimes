@@ -7580,7 +7580,6 @@ dependencies = [
  "sp-state-machine 0.51.0",
  "sp-statement-store",
  "sp-trie 44.0.0",
- "staging-xcm",
  "verifiable",
 ]
 
@@ -7654,27 +7653,6 @@ dependencies = [
  "sp-runtime 47.0.0",
  "staging-xcm",
  "verifiable",
-]
-
-[[package]]
-name = "indiv-pallet-nft-credits"
-version = "0.1.0"
-dependencies = [
- "binary-merkle-tree",
- "cumulus-primitives-core",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "indiv-pallet-game",
- "indiv-pallet-score",
- "indiv-support",
- "log",
- "parity-scale-codec",
- "scale-info",
- "sp-api 42.0.0",
- "sp-io 46.0.0",
- "sp-runtime 47.0.0",
- "staging-xcm",
 ]
 
 [[package]]
@@ -12754,7 +12732,6 @@ dependencies = [
  "indiv-pallet-honour",
  "indiv-pallet-members",
  "indiv-pallet-members-notifier",
- "indiv-pallet-nft-credits",
  "indiv-pallet-origin-restriction",
  "indiv-pallet-people",
  "indiv-pallet-people-lite",
