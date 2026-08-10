@@ -1,17 +1,27 @@
-# Local PreviewNet smoke test
+# Local PreviewNet smoke test for PR #1233
 
 This guide reproduces a local network containing the Polkadot relay chain, People Polkadot,
 Asset Hub Polkadot, Bulletin, Web3 Storage, IPFS, the Web3 storage provider, and the Asset Hub
 Ethereum RPC compatibility service.
 
-The tested parent branch is `individuality-integration-local-testing`. Its PreviewNet submodule
-uses `git@github.com:agustinustheo/preview-net-v1.git` and points to commit
-`01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766`, published on branch
-`fix/current-runtimes-local-previewnet` in that repository.
+This is a smoke test of the runtime inherited from `polkadot-fellows/runtimes` PR #1233. It proves
+that the selected WASMs build and that PreviewNet's five chains and supporting services run. It
+does not prove Polkadot production-topology compatibility, governance bootstrap, migrations, PGAS
+deployment, the NFT-credit lifecycle, or complete launch readiness.
+
+The validated revisions are:
+
+- runtimes integration head: `18a7466ea0a4134a6605c84e35af4958103bf732`
+- compatible Individuality SDK: `4fca4f8391f1e38898cfb0803db4da5cb25db9e3`
+- PreviewNet: `01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766`
+
+The `individuality-integration-local-testing` branch is a fork-only review surface. Its
+`.gitmodules`, `preview-net-v1` gitlink, and `rust-toolchain.toml` must not be merged into
+`individuality-integration` or cherry-picked into the fellowship repository.
 
 ## Prerequisites
 
-- Git with SSH access to GitHub
+- Git
 - Rustup
 - Node.js and pnpm
 - GNU Make, jq, and curl
@@ -31,10 +41,11 @@ Create that layout with:
 ```sh
 mkdir workspace
 cd workspace
-git clone --branch main git@github.com:paritytech/individuality.git individuality
+git clone https://github.com/paritytech/individuality.git individuality
+git -C individuality checkout 4fca4f8391f1e38898cfb0803db4da5cb25db9e3
 git clone --recurse-submodules \
   --branch individuality-integration-local-testing \
-  git@github.com:agustinustheo/runtimes.git runtimes
+  https://github.com/agustinustheo/runtimes.git runtimes
 cd runtimes
 ```
 
@@ -62,9 +73,23 @@ git -C preview-net-v1 rev-parse HEAD
 The expected output is:
 
 ```text
-git@github.com:agustinustheo/preview-net-v1.git
+https://github.com/agustinustheo/preview-net-v1.git
 01bdd9b4367eb4ccb67ffa1118ef29fc82fa7766
 ```
+
+Do not use the moving `individuality/main` branch. Before every build, explicitly select and
+record the revisions that define the smoke test:
+
+```sh
+git -C ../individuality checkout 4fca4f8391f1e38898cfb0803db4da5cb25db9e3
+printf 'runtimes=%s\n' "$(git rev-parse HEAD)"
+printf 'individuality=%s\n' "$(git -C ../individuality rev-parse HEAD)"
+printf 'preview-net=%s\n' "$(git -C preview-net-v1 rev-parse HEAD)"
+```
+
+The Individuality SHA is the last reviewed SDK architecture compatible with PR #1233's current
+Game configuration and runtime API. Newer Individuality revisions require runtime adaptations
+that do not belong on this testing branch.
 
 ## 1. Install and verify Cargo 1.93.0
 
@@ -139,12 +164,24 @@ cp target/release/wbuild/bulletin-polkadot-runtime/bulletin_polkadot_runtime.com
 
 Web3 Storage continues to use the compatible artifact downloaded by `make fetch`.
 
-## 6. Regenerate PreviewNet configuration and chain specifications
+## 6. Run all PreviewNet unit tests
+
+```sh
+cd preview-net-v1
+make test-unit
+cd ..
+```
+
+The validated suite contains 146 tests; all 146 must pass before generating specifications or
+starting the network.
+
+## 7. Regenerate PreviewNet configuration and chain specifications
 
 ```sh
 cd preview-net-v1
 make generate-toml
 make generate
+cd ..
 ```
 
 The generated configuration contains three compatibility settings needed by the current runtimes:
@@ -156,9 +193,10 @@ The generated configuration contains three compatibility settings needed by the 
 - Asset Hub's Aura session and keystore keys explicitly use Ed25519. Its local chain name does not
   trigger Zombienet's built-in `asset-hub-polkadot` detection.
 
-## 7. Start the smoke network
+## 8. Start the smoke network
 
 ```sh
+cd preview-net-v1
 make start EPHEMERAL=1
 ```
 
@@ -176,13 +214,13 @@ The RPC ports are:
 | Bulletin | 10030 |
 | Web3 Storage | 10040 |
 
-## 8. Verify that every chain advances
+## 9. Verify that every chain advances
 
 In another terminal, run this twice with a 15–30 second gap:
 
 ```sh
 for port in 10000 10010 10020 10030 10040; do
-  printf '%s=' "$port"
+  printf '%s port=%s height=' "$(date -Iseconds)" "$port"
   curl -sS --max-time 3 \
     -H 'content-type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"chain_getHeader","params":[]}' \
@@ -198,6 +236,19 @@ relay=0x18  people=0x2  asset-hub=0x2  bulletin=0x4  web3-storage=0x5
 relay=0x1c  people=0x5  asset-hub=0x5  bulletin=0x8  web3-storage=0x9
 ```
 
+Run the following health check for every chain. Each response must report `isSyncing: false` and
+must not contain an RPC error:
+
+```sh
+for port in 10000 10010 10020 10030 10040; do
+  printf 'port=%s ' "$port"
+  curl -sS --max-time 3 \
+    -H 'content-type: application/json' \
+    --data '{"jsonrpc":"2.0","id":1,"method":"system_health","params":[]}' \
+    "http://127.0.0.1:$port" | jq -c '.result // .error'
+done
+```
+
 Check the supporting services with:
 
 ```sh
@@ -206,13 +257,15 @@ curl http://127.0.0.1:8080/ipfs/bafkqaaa
 curl -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
   http://127.0.0.1:8545
+curl -sS -o /dev/null -w 'storage-provider HTTP %{http_code}\n' \
+  http://127.0.0.1:3333/
 ```
 
 The Web3 storage provider listens on port 3333. A 404 response at `/` still proves the HTTP server
 is listening; its process log should also say that it connected, registered on-chain, and started
 the checkpoint coordinator.
 
-## 9. Stop the network
+## 10. Stop the network
 
 Return to the PreviewNet terminal and press Ctrl-C. The ephemeral network and its child processes
 should exit cleanly.
