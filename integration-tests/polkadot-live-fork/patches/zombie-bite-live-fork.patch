@@ -1,0 +1,308 @@
+diff --git a/src/config.rs b/src/config.rs
+index 6a728cf..19bcf9f 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -18,6 +18,11 @@ pub fn get_state_pruning_config() -> String {
+     env::var("ZOMBIE_BITE_STATE_PRUNING").unwrap_or_else(|_| STATE_PRUNING.to_string())
+ }
+ 
++pub fn get_para_state_pruning_config(para_id: u32) -> String {
++    env::var(format!("ZOMBIE_BITE_PARA_{para_id}_STATE_PRUNING"))
++        .unwrap_or_else(|_| get_state_pruning_config())
++}
++
+ pub const AH_POLKADOT_RCP: &str = "https://asset-hub-polkadot-rpc.n.dwellir.com";
+ pub const AH_KUSAMA_RCP: &str = "https://asset-hub-kusama-rpc.n.dwellir.com";
+ 
+@@ -269,8 +274,18 @@ impl Relaychain {
+         })
+     }
+ 
+-    // TODO: make this endpoints configurables
+     pub fn sync_endpoint(&self) -> String {
++        let configured = match self {
++            Relaychain::Polkadot { maybe_sync_url, .. }
++            | Relaychain::Kusama { maybe_sync_url, .. }
++            | Relaychain::Paseo { maybe_sync_url, .. }
++            | Relaychain::Westend { maybe_sync_url, .. } => maybe_sync_url,
++        };
++
++        if let Some(endpoint) = configured {
++            return endpoint.clone();
++        }
++
+         String::from(match self {
+             Relaychain::Polkadot { .. } => "wss://rpc.polkadot.io",
+             Relaychain::Kusama { .. } => "wss://kusama-rpc.polkadot.io",
+@@ -280,12 +295,7 @@ impl Relaychain {
+     }
+ 
+     pub fn rpc_endpoint(&self) -> String {
+-        String::from(match self {
+-            Relaychain::Polkadot { .. } => "wss://rpc.polkadot.io",
+-            Relaychain::Kusama { .. } => "wss://kusama-rpc.polkadot.io",
+-            Relaychain::Paseo { .. } => "wss://paseo-rpc.dwellir.com",
+-            Relaychain::Westend { .. } => "wss://westend-rpc.n.dwellir.com",
+-        })
++        self.sync_endpoint()
+     }
+ 
+     pub fn context(&self) -> Context {
+@@ -625,8 +635,11 @@ pub fn generate_network_config(
+                     ("-l", "aura=debug,runtime=trace,cumulus-consensus=trace,consensus::common=trace,parachain::collation-generation=trace,parachain::collator-protocol=trace,parachain=debug,basic-authorship=trace").into(),
+                     "--force-authoring".into()
+                 ]);
+-                if let Ok(port) = env::var("ZOMBIE_BITE_AH_PORT") {
+-                    let rpc_port = port.parse().expect("env var ZOMBIE_BITE_AH_PORT must be a valid u16");
++                let para_port_var = format!("ZOMBIE_BITE_PARA_{}_PORT", para.id());
++                if let Ok(port) = env::var(&para_port_var).or_else(|_| env::var("ZOMBIE_BITE_AH_PORT")) {
++                    let rpc_port = port.parse().unwrap_or_else(|_| {
++                        panic!("env var {para_port_var} (or ZOMBIE_BITE_AH_PORT) must be a valid u16")
++                    });
+                     col_builder.with_rpc_port(rpc_port)
+                 } else {
+                     col_builder
+@@ -1069,6 +1082,16 @@ mod test {
+         }
+     }
+ 
++    #[test]
++    fn relaychain_uses_configured_sync_url_for_sync_and_rpc() {
++        let endpoint = "wss://polkadot-rpc.publicnode.com";
++        let relaychain =
++            Relaychain::new_with_values("polkadot", None, Some(endpoint.to_string()), None);
++
++        assert_eq!(relaychain.sync_endpoint(), endpoint);
++        assert_eq!(relaychain.rpc_endpoint(), endpoint);
++    }
++
+     #[test]
+     fn relaychain_epoch_durations() {
+         assert_eq!(Relaychain::new("polkadot").epoch_duration(), 2400);
+diff --git a/src/doppelganger.rs b/src/doppelganger.rs
+index 77a3130..947e373 100644
+--- a/src/doppelganger.rs
++++ b/src/doppelganger.rs
+@@ -2,7 +2,7 @@
+ // TODO: don't allow dead_code
+ 
+ use anyhow::anyhow;
+-use futures::future::try_join_all;
++use futures::future::{ready, try_join_all};
+ use futures::FutureExt;
+ use serde_json::json;
+ // use serde_json::json;
+@@ -37,7 +37,8 @@ use crate::utils::{
+ };
+ 
+ use crate::config::{
+-    get_assigned_cores, get_state_pruning_config, Context, Parachain, Relaychain, Step,
++    get_assigned_cores, get_para_state_pruning_config, get_state_pruning_config, Context,
++    Parachain, Relaychain, Step,
+ };
+ use crate::overrides::{generate_default_overrides_for_para, generate_default_overrides_for_rc};
+ use crate::sync::{sync_para, sync_relay_only};
+@@ -110,6 +111,35 @@ pub async fn doppelganger_inner(
+             None
+         };
+ 
++        let para_chain_name = para.as_chain_string(&relay_chain.as_chain_string());
++        let cached_spec_path = format!("{base_dir_str}/{para_chain_name}-spec.json");
++        let cached_snap_path = format!("{base_dir_str}/{para_chain_name}-snap.tgz");
++        let cached_head_path = format!("{base_dir_str}/paras/{para_chain_name}/head.txt");
++        let reuse_cached = env::var("ZOMBIE_BITE_REUSE_PARA_ARTIFACTS").is_ok()
++            && Path::new(&cached_spec_path).is_file()
++            && Path::new(&cached_snap_path).is_file()
++            && Path::new(&cached_head_path).is_file()
++            && Path::new(&info_path).is_file();
++
++        if reuse_cached {
++            info!("♻️ Reusing cached snapshot for parachain {}", para.id());
++            let cached_chain = para
++                .chain_spec_path()
++                .map(str::to_string)
++                .unwrap_or(para_chain_name);
++            syncs.push(
++                ready(Ok::<_, ()>((
++                    None::<zombienet_provider::DynNode>,
++                    String::new(),
++                    cached_chain,
++                    cached_head_path,
++                    true,
++                )))
++                .boxed(),
++            );
++            continue;
++        }
++
+         syncs.push(
+             sync_para(
+                 ns.clone(),
+@@ -122,6 +152,11 @@ pub async fn doppelganger_inner(
+                 maybe_target_header_path,
+                 database,
+             )
++            .map(|result| {
++                result.map(|(node, db_path, chain, head_path)| {
++                    (Some(node), db_path, chain, head_path, false)
++                })
++            })
+             .boxed(),
+         );
+     }
+@@ -132,7 +167,7 @@ pub async fn doppelganger_inner(
+     let mut para_artifacts = vec![];
+     let mut para_heads_env = vec![];
+     let context_para = Context::Parachain;
+-    for (para_index, (_sync_node, sync_db_path, sync_chain, sync_head_path)) in
++    for (para_index, (_sync_node, sync_db_path, sync_chain, sync_head_path, reused)) in
+         res.into_iter().enumerate()
+     {
+         let para = paras_to
+@@ -151,7 +186,12 @@ pub async fn doppelganger_inner(
+         let sync_chain_name = para.as_chain_string(&relay_chain.as_chain_string());
+         let chain_spec_path = format!("{}/{}-spec.json", base_dir_str, sync_chain_name);
+ 
+-        if para.is_custom() {
++        if reused {
++            info!(
++                "♻️ Keeping cached spec and snapshot for parachain {}",
++                para.id()
++            );
++        } else if para.is_custom() {
+             // For custom paras, copy the user's chain spec and clear bootNodes
+             // instead of running `doppelganger-parachain build-spec` which may not
+             // understand arbitrary runtimes.
+@@ -179,7 +219,9 @@ pub async fn doppelganger_inner(
+         // generate the data.tgz to use as snapshot
+         let snap_path = format!("{}/{}-snap.tgz", base_dir_str, sync_chain_name);
+         trace!("snap_path: {snap_path}");
+-        generate_snap(&sync_db_path, &snap_path).await.unwrap();
++        if !reused {
++            generate_snap(&sync_db_path, &snap_path).await.unwrap();
++        }
+ 
+         let para_head_str = read_to_string(&sync_head_path)
+             .unwrap_or_else(|_| panic!("read para_head ({sync_head_path}) file should works."));
+@@ -471,7 +513,10 @@ pub async fn generate_artifacts(
+                 l if l.starts_with("default_db_snapshot =") => {
+                     String::from("") // emty to remove
+                 }
+-                l if l.starts_with("name =") => {
++                l if l == r#"name = "alice""#
++                    || l == r#"name = "bob""#
++                    || l.starts_with(r#"name = "Collator-"#) =>
++                {
+                     if needs_to_insert_db {
+                         let snap_line = format!(r#"db_snapshot = "{}""#, snaps.remove(0));
+                         trace!("setting {snap_line}");
+@@ -717,13 +762,19 @@ async fn generate_config(
+                 )
+             };
+ 
+-            let para_rpc_port: u16 = if let Ok(port) = env::var("ZOMBIE_BITE_AH_PORT") {
+-                port.parse()
+-                    .expect("env var ZOMBIE_BITE_AH_PORT must be a valid u16")
++            let para_id = para.para_id.expect("Para id should be available");
++            let para_port_var = format!("ZOMBIE_BITE_PARA_{para_id}_PORT");
++            let para_rpc_port: u16 = if let Ok(port) =
++                env::var(&para_port_var).or_else(|_| env::var("ZOMBIE_BITE_AH_PORT"))
++            {
++                port.parse().unwrap_or_else(|_| {
++                    panic!("env var {para_port_var} (or ZOMBIE_BITE_AH_PORT) must be a valid u16")
++                })
+             } else {
+                 get_random_port().await
+             };
+ 
++            let para_state_pruning = get_para_state_pruning_config(para_id);
+             let mut para_default_args = vec![
+                 (
+                     "--relay-chain-rpc-urls",
+@@ -735,7 +786,7 @@ async fn generate_config(
+                 "--discover-local".into(),
+                 "--allow-private-ip".into(),
+                 "--no-hardware-benchmarks".into(),
+-                ("--state-pruning", get_state_pruning_config().as_str()).into(),
++                ("--state-pruning", para_state_pruning.as_str()).into(),
+                 ("--database", database).into(),
+             ];
+ 
+@@ -745,11 +796,10 @@ async fn generate_config(
+                 }
+             }
+ 
+-            if para.chain.contains("asset-hub") {
++            if para.chain.contains("asset-hub") || para.chain.contains("people") {
+                 para_default_args.push("--authoring=slot-based".into());
+             }
+ 
+-            let para_id = para.para_id.expect("Para id should be available");
+             let collator_name = format!("Collator-{}", para_id);
+ 
+             config = config.with_parachain(|p| {
+diff --git a/src/sync.rs b/src/sync.rs
+index efc3d91..1ac1148 100644
+--- a/src/sync.rs
++++ b/src/sync.rs
+@@ -7,7 +7,9 @@ use std::{
+     time::Duration,
+ };
+ 
+-use crate::config::{get_state_pruning_config, Parachain, Relaychain};
++use crate::config::{
++    get_para_state_pruning_config, get_state_pruning_config, Parachain, Relaychain,
++};
+ use crate::utils::get_random_port;
+ 
+ use reqwest::Url;
+@@ -98,11 +100,32 @@ pub async fn sync_relay_only(
+     wait_ws_ready(&metrics_url).await.unwrap();
+     let url = reqwest::Url::try_from(metrics_url.as_str()).unwrap();
+     wait_sync(url).await.unwrap();
++    if wait_for_file(info_path.as_ref(), Duration::from_secs(180))
++        .await
++        .is_err()
++    {
++        error!(
++            "❌ Relay sync stopped before Doppelganger wrote {}",
++            info_path.as_ref()
++        );
++        return Err(());
++    }
+     info!("✅ Synced (chain: {})", chain.as_ref());
+     // we should just paused
+     Ok((sync_node, sync_db_path, chain.as_ref().to_string()))
+ }
+ 
++async fn wait_for_file(path: impl AsRef<std::path::Path>, timeout: Duration) -> Result<(), ()> {
++    let started = tokio::time::Instant::now();
++    while started.elapsed() < timeout {
++        if tokio::fs::try_exists(path.as_ref()).await.unwrap_or(false) {
++            return Ok(());
++        }
++        tokio::time::sleep(Duration::from_secs(1)).await;
++    }
++    Err(())
++}
++
+ #[allow(clippy::too_many_arguments)]
+ pub async fn sync_para(
+     ns: DynNamespace,
+@@ -178,6 +201,7 @@ pub async fn sync_para(
+         chain, unique_node_name
+     );
+ 
++    let state_pruning = get_para_state_pruning_config(parachain.id());
+     let opts = SpawnNodeOptions::new(unique_node_name.as_str(), cmd.as_ref())
+         .args(vec![
+             "--chain",
+@@ -195,7 +219,7 @@ pub async fn sync_para(
+             "--no-hardware-benchmarks",
+             // needed to not drop the pre-migration state
+             "--state-pruning",
+-            get_state_pruning_config().as_str(),
++            state_pruning.as_str(),
+             "--database",
+             database,
+             "--",
