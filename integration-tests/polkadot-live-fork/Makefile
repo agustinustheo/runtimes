@@ -1,4 +1,7 @@
-.PHONY: setup preflight config bite spawn verify-fork verify stop
+.PHONY: build-wasm setup preflight config bite spawn verify-fork verify upgrade verify-upgrade stop
+
+build-wasm:
+	./scripts/build-wasm.sh
 
 setup:
 	./scripts/setup.sh
@@ -20,6 +23,12 @@ verify-fork:
 
 verify:
 	@bash -c 'source ./scripts/common.sh && node ./scripts/verify.mjs'
+
+upgrade:
+	./scripts/upgrade.sh
+
+verify-upgrade:
+	@bash -c 'source ./scripts/common.sh && node ./scripts/verify-upgrade.mjs'
 
 stop:
 	./scripts/stop.sh

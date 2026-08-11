@@ -204,7 +204,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	impl_name: Cow::Borrowed("statemint"),
 	spec_name: Cow::Borrowed("statemint"),
 	authoring_version: 1,
-	spec_version: 2_003_002,
+	spec_version: 2_003_003,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	// Not bumped: the Individuality pipeline is a *new* extension version (`TxExtensionV1`), and

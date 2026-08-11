@@ -8,14 +8,26 @@ const endpoints = [
 ];
 
 for (const [name, endpoint, expectedChain] of endpoints) {
-  const [chain, header, genesis] = await Promise.all([
+  const [chain, header, genesis, runtimeVersion] = await Promise.all([
     rpc(endpoint, "system_chain"),
     rpc(endpoint, "chain_getHeader"),
     rpc(endpoint, "chain_getBlockHash", [0]),
+    rpc(endpoint, "state_getRuntimeVersion"),
   ]);
   if (chain !== expectedChain) throw new Error(`${name}: expected ${expectedChain}, got ${chain}`);
   if (name === "bulletin" && genesis !== process.env.BULLETIN_GENESIS_HASH) {
     throw new Error(`Bulletin spec/RPC genesis mismatch: ${genesis}`);
   }
-  console.log(`${name}: ${chain}, block ${hexBlockNumber(header)}, genesis ${genesis}`);
+  const expectedSpecVersion = {
+    "asset-hub": Number(process.env.ASSET_HUB_LIVE_SPEC_VERSION),
+    people: Number(process.env.PEOPLE_LIVE_SPEC_VERSION),
+  }[name];
+  if (expectedSpecVersion && runtimeVersion.specVersion !== expectedSpecVersion) {
+    throw new Error(
+      `${name}: expected live spec_version ${expectedSpecVersion}, got ${runtimeVersion.specVersion}`,
+    );
+  }
+  console.log(
+    `${name}: ${chain}, block ${hexBlockNumber(header)}, spec ${runtimeVersion.specVersion}, genesis ${genesis}`,
+  );
 }

@@ -1,37 +1,63 @@
-# Polkadot live-state fork with Zombie Bite
+# Polkadot live-state runtime upgrades with Zombie Bite
 
-This harness forks live Polkadot state from `wss://polkadot-rpc.publicnode.com` and attaches live-state forks of Asset Hub (1000), People (1004), and Bulletin (1010). The three parachains run the runtime artifacts built from this runtimes checkout.
+This harness captures live Polkadot Relay, Asset Hub (1000), People (1004), and Bulletin (1010) state, starts all four chains with their captured production runtimes, and then applies the runtime candidates built from this checkout.
 
-Zombie Bite and Doppelganger are pinned in `versions.env`. A small pinned patch makes Zombie Bite honor the configured relay RPC and provides a distinct fixed RPC port for every parachain. Generated state, chain specs, and logs are ignored by Git.
-Setup exposes the relay Doppelganger under the `polkadot` command emitted by Zombie Bite's spawn config. Parachains spawn with the current SDK `preview-net-v1/bin/polkadot-omni-node`; override `PARACHAIN_NODE_BIN` if that binary lives elsewhere. Asset Hub bites default to archive-canonical state pruning while the relay and other parachains retain Zombie Bite's `256` default. This keeps Asset Hub's live canonical state while avoiding the oversized RocksDB pruning journal that macOS cannot read when its initial state import exceeds 2 GiB.
+PR #1233 requires two upgrades in this order:
 
-Successful bites discard Zombie Bite's large intermediate debug directory after the spawn artifacts are safely assembled. Set `ZOMBIE_BITE_KEEP_DEBUG=1` to retain it when diagnosing a failed fork.
-Interrupted bites can be rerun in place: validated parachain snapshots are reused, while an incomplete relay database resumes from its last imported state.
+1. Asset Hub, so the PGAS asset and the Asset Hub side of the Individuality protocol exist.
+2. People, so the People pallets and notifier can send to the already-upgraded Asset Hub.
 
-## Run
+Relay and Bulletin are deliberately not upgraded. Bulletin's current live runtime does not contain `pallet-transaction-storage`, so People-to-Bulletin long-term storage cannot succeed until a separate future Bulletin runtime upgrade supplies that receiver. The harness does not claim that unavailable flow works.
 
-The default runtime artifact directory is the primary runtimes checkout's `target`. Override `RUNTIMES_TARGET_DIR`, or any individual `*_WASM` variable, when needed.
+Zombie Bite and Doppelganger are pinned in `versions.env`. The pinned patch adds the multi-parachain live-fork support needed here, lets ParityDB writes settle after the target block is imported, stops the capture node, reopens the database to replay pending logs and verify the pruning metadata, and only then snapshots it. It also imports candidate-specific `System.AuthorizedUpgrade` values, fetches and retains the exact live People-to-Asset-Hub HRMP channel and MQC head required by the targeted XCM scenario, and tolerates the initial metrics window during spawn. Generated state, chain specs, and logs are ignored by Git.
+
+The default database is pruned ParityDB. This avoids the oversized RocksDB pruning-journal failure seen on macOS while still retaining the captured current state needed for the upgrades.
+
+## Run the complete lifecycle
+
+Build the two candidate WASMs first. The harness expects both candidates to use a `spec_version` higher than the captured live versions.
 
 ```sh
 cd integration-tests/polkadot-live-fork
+make build-wasm
 make bite
 make spawn
 ```
 
-Keep `make spawn` running. From another shell:
+Keep `make spawn` running. In another shell:
 
 ```sh
 make verify-fork
 make verify
+make upgrade
+make verify-upgrade
 make stop
 ```
 
-You can run `make verify` immediately after `make spawn`. Startup is sequential and can take a few minutes, so verification waits up to five minutes for all four RPCs instead of treating an RPC that has not spawned yet as a failed chain. Override the wait with `VERIFY_STARTUP_TIMEOUT_MS` when needed.
+The default runtime artifacts come from the primary runtimes checkout's `target/release/wbuild`. Override `RUNTIMES_TARGET_DIR`, `ASSET_HUB_WASM`, or `PEOPLE_WASM` when needed. The default RPC ports are Relay `9944`, Asset Hub `9910`, People `9914`, and Bulletin `9920`; the actual ports are recorded in `artifacts-upgrade-paritydb/ports.json`.
 
-Run `make verify-fork` first when you want to establish provenance independently of candidate-runtime and block-production checks. At each block recorded in `artifacts/ready.json`, it compares the local boundary header with the current canonical header returned by the configured live RPC. The genesis hash, block number, canonical parent hash, extrinsics root, and consensus digest must match. The boundary block hash and state root may differ because Zombie Bite deliberately rewrites state to install runtime and authority overrides.
+## What each phase proves
 
-New bites default to relay `9944`, Asset Hub `9910`, People `9914`, and Bulletin `9920`. The actual ports are recorded in `artifacts/ports.json`, which `make verify` reads before requiring all four endpoints to advance over 24 seconds.
+`make verify-fork` independently checks live provenance at the captured boundary. The local header must match the configured live RPC's block number, parent hash, extrinsics root, and consensus digest. The boundary block hash and state root may differ because Zombie Bite installs local authority and narrowly scoped test storage.
 
-## Boundary
+`make verify` runs before upgrades. It proves that:
 
-This proves that the selected relay and parachain state was copied from live RPCs, the candidate runtimes were injected, the parachains were registered in the local relay state, and all four chains produce blocks locally. It does not by itself prove a production upgrade, external client compatibility, or successful application-level XCM messages. Those require explicit scenario transactions after startup.
+- all three parachains are registered in the relay state;
+- Asset Hub and People still run the captured live runtime code and live `spec_version`, not the candidates;
+- both chains contain an authorization for their exact candidate code hash;
+- the local relay retains the live People-to-Asset-Hub HRMP channel and MQC head used by the scenario;
+- the pending People-to-Asset-Hub notifier fixture is present; and
+- Relay, Asset Hub, People, and Bulletin all advance.
+
+The notifier fixture represents the governance subscription that production rollout must create. It is written under storage prefixes that do not exist in the captured People runtime; it becomes readable only after the People candidate is enacted. It does not grant an account root or bypass XCM execution.
+
+`make upgrade` submits unsigned `System.apply_authorized_upgrade` extrinsics, first on Asset Hub and then on People. FRAME checks the pre-authorized code hash and version before routing the code through the parachain runtime-upgrade path. The upgrade client then checks:
+
+- the exact candidate code and `spec_version` became active;
+- Asset Hub created PGAS asset `2_000_000_000` without changing `Assets.NextAssetId`;
+- the Revive v4 multi-block migration completed and is recorded as historic; and
+- after the People upgrade, its authorized notifier maintenance call sends a real XCM that activates `MembersSubscriber` on Asset Hub.
+
+`make verify-upgrade` independently proves that both authorizations were consumed, Relay and Bulletin code remained unchanged, and all four chains continue producing blocks.
+
+This is live-state upgrade and targeted cross-chain evidence. It does not replace production governance execution, external-client compatibility testing, or the later Bulletin receiver upgrade.
