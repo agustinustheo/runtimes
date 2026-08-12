@@ -7,9 +7,9 @@ PR #1233 requires two upgrades in this order:
 1. Asset Hub, so that the PGAS asset and the Asset Hub side of the Individuality protocol exist.
 2. People, so that the People pallets and the notifier can send to Asset Hub after its upgrade.
 
-The harness intentionally does not upgrade the Relay chain and Bulletin. Bulletin's current live runtime does not contain `pallet-transaction-storage`. Thus People-to-Bulletin long-term storage cannot succeed until a separate future Bulletin runtime upgrade supplies that receiver. The harness does not claim that this unavailable flow works.
+The harness intentionally does not upgrade the Relay chain and Bulletin. Bulletin's current live runtime does not contain `pallet-transaction-storage`. Thus People-to-Bulletin long-term storage cannot succeed until a future upgrade of the Bulletin runtime supplies that receiver. The harness does not claim that this unavailable flow works.
 
-The file `versions.env` pins Zombie Bite and Doppelganger. The pinned patch adds the multi-parachain live-fork support that this harness needs. After the capture node imports the target block, the patch lets the ParityDB writes settle. The patch then stops the capture node. The patch reopens the database to replay the pending logs and to verify the pruning metadata. The patch makes a snapshot of the database only after these steps. The patch also imports candidate-specific `System.AuthorizedUpgrade` values. The patch fetches and keeps the exact live People-to-Asset-Hub HRMP channel and MQC head that the targeted XCM scenario requires. The patch also tolerates the initial metrics window during spawn. Git ignores the generated state, the chain specs, and the logs.
+The file `versions.env` pins Zombie Bite and Doppelganger. The pinned patch adds the multi-parachain live-fork support that this harness needs. After the capture node imports the target block, the patch lets the ParityDB writes settle. The patch then stops the capture node. The patch reopens the database to replay the pending logs. The patch then verifies the pruning metadata. The patch makes a snapshot of the database only after these steps. The patch also imports candidate-specific `System.AuthorizedUpgrade` values. The patch fetches the exact live People-to-Asset-Hub HRMP channel and MQC head that the targeted XCM scenario requires. The patch keeps this channel and head. The patch also tolerates the initial metrics window during spawn. Git ignores the generated state, the chain specs, and the logs.
 
 The default database is pruned ParityDB. This configuration prevents the oversized RocksDB pruning-journal failure that occurs on macOS. This configuration also keeps the captured current state that the upgrades need.
 
@@ -56,7 +56,7 @@ The notifier fixture represents the governance subscription that the production 
 - the exact candidate code and `spec_version` became active;
 - Asset Hub created the PGAS asset `2_000_000_000` and did not change `Assets.NextAssetId`;
 - the Revive v4 multi-block migration completed, and the runtime records it as historic; and
-- after the People upgrade, the authorized maintenance call of the notifier sends a real XCM that activates `MembersSubscriber` on Asset Hub.
+- after the People upgrade, the notifier's authorized maintenance call sends a real XCM that activates `MembersSubscriber` on Asset Hub.
 
 `make verify-upgrade` makes an independent check that proves three facts. The upgrades consumed both authorizations. The Relay chain code and the Bulletin code did not change. All four chains continue to produce blocks.
 
