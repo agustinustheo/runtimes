@@ -1,6 +1,6 @@
 # Local PreviewNet validation report
 
-This report records the commands and results from the nine-step local PreviewNet validation performed on 10 August 2026. For the fresh-machine build and startup procedure, see [Local PreviewNet smoke test for PR #1233](./local-previewnet-smoke-test.md).
+This report records the commands and the results from the nine-step local PreviewNet validation. We did the validation on 10 August 2026. For the build and startup procedure on a fresh machine, see [Local PreviewNet smoke test for PR #1233](./local-previewnet-smoke-test.md).
 
 ## Tested environment
 
@@ -11,7 +11,7 @@ This report records the commands and results from the nine-step local PreviewNet
 - Test window: 2026-08-10 11:49-11:50 UTC+7
 - Overall result: **PASS**
 
-The commands assume that the network is running and that `curl`, `jq`, Node.js, and the dependencies in `scripts/package.json` are installed.
+Run the commands while the network runs. Before you run the commands, install `curl`, `jq`, Node.js, and the dependencies in `scripts/package.json`.
 
 ```bash
 cd /Users/theo/Projects/parity/runtimes/preview-net-v1
@@ -29,7 +29,7 @@ cd /Users/theo/Projects/parity/runtimes/preview-net-v1
 | IPFS API | `http://127.0.0.1:5001` |
 | IPFS gateway | `http://127.0.0.1:8080` |
 
-These are local `ws://` and `http://` endpoints. TLS is not configured locally, so they are not `wss://` endpoints.
+These are local `ws://` and `http://` endpoints. The local setup does not configure TLS. Thus, the endpoints are not `wss://` endpoints.
 
 ## 1. Check chain identity, health, head, and runtime
 
@@ -78,7 +78,7 @@ Observed results:
 | Bulletin | Bulletin Local | 0 | No | `0x5ff` | `bulletin-polkadot@2003002` |
 | Web3 Storage | Web3 Storage Local | 0 | No | `0x614` | `paseo-web3-storage-runtime@4001` |
 
-Result: **PASS**. Zero parachain peers is expected in this single-collator topology. Each parachain reported `shouldHavePeers: false` and continued producing blocks.
+Result: **PASS**. Zero parachain peers is normal in this single-collator topology. Each parachain reports `shouldHavePeers: false` and continues to produce blocks.
 
 ## 2. Prove every chain is advancing
 
@@ -167,7 +167,7 @@ Observed results:
 | Bulletin | `0x603` | 2 |
 | Web3 Storage | `0x618` | 2 |
 
-Result: **PASS**. Every chain returned a complete block with a parent hash, state root, and extrinsics.
+Result: **PASS**. Every chain returned a complete block with a parent hash, a state root, and extrinsics.
 
 ## 4. Check the Asset Hub Ethereum RPC
 
@@ -197,9 +197,9 @@ eth_blockNumber: "0x5c3"
 eth_syncing: null
 ```
 
-Result: **PASS with a presentation caveat**. The service returned the expected chain ID, and its block number matched Asset Hub at `0x5c3`. The captured `eth_syncing` value appears as `null` because jq's `//` operator treats a valid JSON `false` value as absent before falling through to the missing `.error` field.
+Result: **PASS with a presentation caveat**. The service returned the expected chain ID, and its block number matched Asset Hub at `0x5c3`. The captured `eth_syncing` value appears as `null` because of the jq `//` operator. The operator treats a valid JSON `false` value as absent. Then it falls through to the missing `.error` field.
 
-To preserve `false` in future runs, replace the jq expression with `if has("result") then .result else .error end`.
+To keep `false` in future runs, replace the jq expression with `if has("result") then .result else .error end`.
 
 ## 5. Check the Bulletin HOP pool
 
@@ -236,7 +236,7 @@ curl -sS -X POST http://127.0.0.1:5001/api/v0/version | jq
 curl -sS -X POST http://127.0.0.1:5001/api/v0/id | jq '{ID, Addresses}'
 ```
 
-Write a small file, pin it, and retrieve it through the gateway:
+Write a small file. Pin it. Then retrieve it through the gateway:
 
 ```bash
 cid=$(
@@ -260,7 +260,7 @@ CID=QmVASRxb3qrcNzyqSR3s3f4FuctCissXAkfXQcp1VTBcRm
 PreviewNet IPFS smoke test at 2026-08-10T11:50:25+07:00
 ```
 
-Result: **PASS**. The gateway returned the exact content uploaded through the API.
+Result: **PASS**. The gateway returned the exact content that we uploaded through the API.
 
 This step writes and pins a small object in the disposable local IPFS repository.
 
@@ -290,11 +290,11 @@ Observed results:
 }
 ```
 
-Result: **PASS**. The provider was healthy. Empty bucket statistics are expected before an application-level storage flow is submitted.
+Result: **PASS**. The provider was healthy. Empty bucket statistics are normal before you submit an application-level storage flow.
 
 ## 8. Submit and finalize a signed extrinsic on every chain
 
-This submits one paid `system.remark` from the local Alice development account to each chain and waits for finalization. Never use the `//Alice` key on a public or valuable network.
+Warning: never use the `//Alice` key on a public or valuable network. This step submits one paid `system.remark` from the local Alice development account to each chain. Then it waits for finalization.
 
 ```bash
 for WS in \
@@ -394,9 +394,9 @@ Observed results:
 | Bulletin Local | `0xeb9b6128eabe80f46929c9d5fee15a9a639d5152ce6461b50d9d6874ed55b17e` | `0x9f4af8c394f1b9909455a13811a8784ba76623300df3c18eca603f54c71513f8` | 0 |
 | Web3 Storage Local | `0x6903ae6bd7d5ff502c54adb1ce16d100995cb57d764206be4094db8681979a32` | `0xb569f54928bfc32b2d792ed29b4120b4ec681f5aca4031cb0a4e6bbddaf7c340` | 1 |
 
-Result: **PASS**. A signed remark was accepted and finalized on every chain. Web3 Storage's starting nonce of 1 means Alice had already submitted one transaction there; it is not an error.
+Result: **PASS**. Every chain accepts and finalizes a signed remark. The start nonce of 1 on Web3 Storage shows that Alice has already sent one transaction there. This is not an error.
 
-This step changes disposable local chain state and consumes one Alice nonce on each chain.
+This step changes the disposable local chain state. It uses one Alice nonce on each chain.
 
 ## 9. Scan the active Zombienet logs for fatal patterns
 
@@ -435,13 +435,13 @@ Result: **PASS**.
 All nine smoke-test steps passed:
 
 1. All expected RPC endpoints, chain identities, and runtimes were available.
-2. All five chains continued producing blocks.
+2. All five chains continue to produce blocks.
 3. Complete block data was readable from every chain.
-4. The Ethereum compatibility service returned the expected chain ID and tracked Asset Hub; the captured `eth_syncing` presentation is explained above.
+4. The Ethereum compatibility service returned the expected chain ID and tracked Asset Hub. Step 4 explains the captured `eth_syncing` presentation.
 5. The Bulletin HOP RPC was available.
 6. IPFS API, pinning, and gateway retrieval worked end to end.
 7. The Web3 Storage provider reported healthy.
 8. A signed extrinsic finalized successfully on every chain.
 9. No selected fatal patterns appeared in the active Zombienet logs.
 
-This establishes infrastructure health and the basic transaction path. It does not replace application-level testing of HOP submission and claims, storage bucket creation, XCM transfers, restart persistence, or validator-failure recovery.
+This validation establishes infrastructure health and the basic transaction path. It does not replace application-level tests of HOP submission and claims, storage bucket creation, XCM transfers, restart persistence, or validator-failure recovery.
