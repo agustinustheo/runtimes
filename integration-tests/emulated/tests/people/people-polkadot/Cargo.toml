@@ -22,6 +22,8 @@ pallet-identity = { workspace = true, default-features = true }
 indiv-pallet-members = { workspace = true, default-features = true }
 indiv-pallet-members-notifier = { workspace = true, default-features = true }
 indiv-pallet-members-subscriber = { workspace = true, default-features = true }
+indiv-pallet-nft-claims = { workspace = true, default-features = true }
+indiv-pallet-nft-credits = { workspace = true, default-features = true }
 indiv-pallet-people = { workspace = true, default-features = true }
 indiv-support = { workspace = true, default-features = true }
 verifiable = { workspace = true, default-features = true }

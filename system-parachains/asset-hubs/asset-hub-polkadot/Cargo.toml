@@ -44,10 +44,14 @@ frame-try-runtime = { optional = true, workspace = true }
 indiv-pallet-alias-accounts = { workspace = true }
 indiv-pallet-dotns-gateway = { workspace = true }
 indiv-pallet-members-subscriber = { workspace = true }
+indiv-pallet-nft-claims = { workspace = true }
 indiv-pallet-origin-restriction = { workspace = true }
 indiv-pallet-pgas = { workspace = true }
+indiv-precompile-nft-claims = { workspace = true }
 indiv-precompile-personhood = { workspace = true }
+indiv-precompile-scarcity = { workspace = true }
 indiv-support = { workspace = true }
+pallet-scarcity = { workspace = true }
 # Ring-VRF primitives, only needed by the Individuality benchmark helpers, which build ring-VRF SRS
 # chunks and produce real proofs against them.
 verifiable = { optional = true, workspace = true }
@@ -205,9 +209,12 @@ runtime-benchmarks = [
 	"indiv-pallet-alias-accounts/runtime-benchmarks",
 	"indiv-pallet-dotns-gateway/runtime-benchmarks",
 	"indiv-pallet-members-subscriber/runtime-benchmarks",
+	"indiv-pallet-nft-claims/runtime-benchmarks",
 	"indiv-pallet-origin-restriction/runtime-benchmarks",
 	"indiv-pallet-pgas/runtime-benchmarks",
+	"indiv-precompile-nft-claims/runtime-benchmarks",
 	"indiv-precompile-personhood/runtime-benchmarks",
+	"indiv-precompile-scarcity/runtime-benchmarks",
 	"indiv-support/genesis",
 	"indiv-support/runtime-benchmarks",
 	"kusama-runtime-constants/runtime-benchmarks",
@@ -244,6 +251,7 @@ runtime-benchmarks = [
 	"pallet-rc-migrator/runtime-benchmarks",
 	"pallet-referenda/runtime-benchmarks",
 	"pallet-revive/runtime-benchmarks",
+	"pallet-scarcity/runtime-benchmarks",
 	"pallet-scheduler/runtime-benchmarks",
 	"pallet-session/runtime-benchmarks",
 	"pallet-staking-async-rc-client/runtime-benchmarks",
@@ -298,9 +306,12 @@ try-runtime = [
 	"indiv-pallet-alias-accounts/try-runtime",
 	"indiv-pallet-dotns-gateway/try-runtime",
 	"indiv-pallet-members-subscriber/try-runtime",
+	"indiv-pallet-nft-claims/try-runtime",
 	"indiv-pallet-origin-restriction/try-runtime",
 	"indiv-pallet-pgas/try-runtime",
+	"indiv-precompile-nft-claims/try-runtime",
 	"indiv-precompile-personhood/try-runtime",
+	"indiv-precompile-scarcity/try-runtime",
 	"pallet-ah-ops/try-runtime",
 	"pallet-asset-conversion-precompiles/try-runtime",
 	"pallet-asset-conversion-tx-payment/try-runtime",
@@ -335,6 +346,7 @@ try-runtime = [
 	"pallet-rc-migrator/try-runtime",
 	"pallet-referenda/try-runtime",
 	"pallet-revive/try-runtime",
+	"pallet-scarcity/try-runtime",
 	"pallet-scheduler/try-runtime",
 	"pallet-session/try-runtime",
 	"pallet-staking-async-rc-client/try-runtime",
@@ -397,9 +409,12 @@ std = [
 	"indiv-pallet-alias-accounts/std",
 	"indiv-pallet-dotns-gateway/std",
 	"indiv-pallet-members-subscriber/std",
+	"indiv-pallet-nft-claims/std",
 	"indiv-pallet-origin-restriction/std",
 	"indiv-pallet-pgas/std",
+	"indiv-precompile-nft-claims/std",
 	"indiv-precompile-personhood/std",
+	"indiv-precompile-scarcity/std",
 	"indiv-support/std",
 	"kusama-runtime-constants/std",
 	"log/std",
@@ -440,6 +455,7 @@ std = [
 	"pallet-rc-migrator/std",
 	"pallet-referenda/std",
 	"pallet-revive/std",
+	"pallet-scarcity/std",
 	"pallet-scheduler/std",
 	"pallet-session/std",
 	"pallet-staking-async-rc-client/std",

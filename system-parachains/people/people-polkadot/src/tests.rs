@@ -397,6 +397,22 @@ fn individuality_cross_runtime_pallet_indices_are_pinned() {
 	assert_eq!(MembersNotifier::index(), 69);
 	assert_eq!(RingRootsNotifierEndpoint::get().pallet_index, MembersNotifier::index() as u8,);
 	assert_eq!(asset_hub_polkadot_runtime::MembersSubscriber::index(), 97);
+
+	assert_eq!(asset_hub_polkadot_runtime::NftClaims::index(), 96);
+	assert_eq!(
+		<Runtime as indiv_pallet_nft_credits::Config>::NftClaimsPalletIndex::get(),
+		asset_hub_polkadot_runtime::NftClaims::index() as u8,
+	);
+
+	assert!(
+		<Runtime as indiv_pallet_nft_credits::Config>::MaxCreditTreesPerMessage::get() <=
+			<asset_hub_polkadot_runtime::Runtime as indiv_pallet_nft_claims::Config>::MaxTreesPerMessage::get(),
+	);
+
+	let max_credits = <Runtime as indiv_pallet_nft_credits::Config>::MaxCreditsPerBlock::get();
+	let max_proof_nodes =
+		<asset_hub_polkadot_runtime::Runtime as indiv_pallet_nft_claims::Config>::MaxProofNodes::get();
+	assert!(u32::BITS - max_credits.next_power_of_two().leading_zeros() - 1 <= max_proof_nodes);
 }
 
 #[test]

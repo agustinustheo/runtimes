@@ -30,6 +30,7 @@ pub mod indiv_pallet_game;
 pub mod indiv_pallet_honour;
 pub mod indiv_pallet_members;
 pub mod indiv_pallet_members_notifier;
+pub mod indiv_pallet_nft_credits;
 pub mod indiv_pallet_origin_restriction;
 pub mod indiv_pallet_people;
 pub mod indiv_pallet_people_lite;

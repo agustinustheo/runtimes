@@ -101,6 +101,8 @@ indiv-pallet-honour = { path = "../individuality/pallets/honour", default-featur
 indiv-pallet-members = { path = "../individuality/pallets/members", default-features = false }
 indiv-pallet-members-notifier = { path = "../individuality/pallets/members-notifier", default-features = false }
 indiv-pallet-members-subscriber = { path = "../individuality/pallets/members-subscriber", default-features = false }
+indiv-pallet-nft-claims = { path = "../individuality/pallets/nft-claims", default-features = false }
+indiv-pallet-nft-credits = { path = "../individuality/pallets/nft-credits", default-features = false }
 indiv-pallet-origin-restriction = { path = "../individuality/pallets/origin-restriction", default-features = false }
 indiv-pallet-people = { path = "../individuality/pallets/people-multi", default-features = false }
 indiv-pallet-people-lite = { path = "../individuality/pallets/people-lite", default-features = false }
@@ -109,7 +111,9 @@ indiv-pallet-proof-of-ink = { path = "../individuality/pallets/proof-of-ink", de
 indiv-pallet-relay-randomness = { path = "../individuality/pallets/relay-randomness", default-features = false }
 indiv-pallet-resources = { path = "../individuality/pallets/resources", default-features = false }
 indiv-pallet-score = { path = "../individuality/pallets/score", default-features = false }
+indiv-precompile-nft-claims = { path = "../individuality/precompiles/nft-claims", default-features = false }
 indiv-precompile-personhood = { path = "../individuality/precompiles/personhood", default-features = false }
+indiv-precompile-scarcity = { path = "../individuality/precompiles/scarcity", default-features = false }
 indiv-support = { path = "../individuality/support", default-features = false }
 integration-tests-helpers = { path = "integration-tests/emulated/helpers" }
 # Ring-VRF primitives. Pinned to the same revision the individuality crates above depend on so
@@ -199,6 +203,8 @@ pallet-referenda = { version = "48.0.0", default-features = false }
 pallet-remote-proxy = { path = "pallets/remote-proxy", default-features = false }
 pallet-revive = { version = "0.18.0", default-features = false }
 pallet-salary = { version = "33.0.0", default-features = false }
+# Part of the Individuality despite the name.
+pallet-scarcity = { path = "../individuality/pallets/scarcity", default-features = false }
 pallet-scheduler = { version = "49.0.0", default-features = false }
 pallet-session = { version = "48.0.0", default-features = false }
 pallet-session-benchmarking = { version = "48.0.0", default-features = false }

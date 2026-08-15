@@ -141,8 +141,9 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNotifierSibling {
 
 	fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
 		match o.clone().into() {
-			Ok(cumulus_pallet_xcm::Origin::SiblingParachain(id)) if u32::from(id) == PEOPLE_ID =>
-				Ok(()),
+			Ok(cumulus_pallet_xcm::Origin::SiblingParachain(id)) if u32::from(id) == PEOPLE_ID => {
+				Ok(())
+			},
 			_ => Err(o),
 		}
 	}
@@ -314,13 +315,14 @@ pub enum RestrictedEntity {
 impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> for RestrictedEntity {
 	fn allowance(&self) -> indiv_pallet_origin_restriction::Allowance<Balance> {
 		match self {
-			RestrictedEntity::DotnsPersonRegistration(_) =>
+			RestrictedEntity::DotnsPersonRegistration(_) => {
 				indiv_pallet_origin_restriction::Allowance {
 					max: dynamic_params::individuality::DotnsPersonRegistrationAllowanceMax::get(),
 					recovery_per_block:
 						dynamic_params::individuality::DotnsPersonRegistrationAllowanceRecovery::get(
 						),
-				},
+				}
+			},
 		}
 	}
 
@@ -353,6 +355,217 @@ impl indiv_pallet_origin_restriction::Config for Runtime {
 	type OperationAllowedOneTimeExcess = OperationAllowedOneTimeExcess;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::OriginRestrictionBenchmarkHelper;
+}
+
+parameter_types! {
+	pub const ScarcityDepositBase: Balance = system_para_deposit(1, 0);
+	pub const ScarcityDepositPerByte: Balance = system_para_deposit(0, 1);
+	pub const ScarcityHoldReason: RuntimeHoldReason =
+		RuntimeHoldReason::Scarcity(pallet_scarcity::HoldReason::StorageDeposit);
+}
+
+/// Storage price shared by every Scarcity deposit converter: a per-record base plus a
+/// per-byte price over the footprint's logical encoded size.
+pub type ScarcityStoragePrice =
+	LinearStoragePrice<ScarcityDepositBase, ScarcityDepositPerByte, Balance>;
+
+impl pallet_scarcity::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_scarcity::weights::SubstrateWeight<Runtime>;
+	type UnixTime = Timestamp;
+	type Balance = Balance;
+	type Consideration = HoldConsideration<
+		AccountId,
+		Balances,
+		ScarcityHoldReason,
+		sp_runtime::traits::Identity,
+		Balance,
+	>;
+	type CollectionDeposit = ScarcityStoragePrice;
+	type ItemDeposit = ScarcityStoragePrice;
+	type InstanceDeposit = ScarcityStoragePrice;
+	type MetadataDeposit = ScarcityStoragePrice;
+	type MaxKeyLen = ConstU32<32>;
+	type MaxValueLen = ConstU32<256>;
+	type MaxInstanceMetadata = ConstU32<100>;
+	type LockPeriod = ConstU64<60>;
+	type MaxTransferPriority = ConstU64<1_000_000>;
+	type OnCollectionDeleted = indiv_pallet_nft_claims::ClearCollectionMinter<Runtime>;
+	type OnPurseOccupied = indiv_precompile_scarcity::MapPurseKey<Runtime>;
+	type MetadataPolicy = indiv_precompile_scarcity::Erc721MetadataPolicy<Runtime>;
+}
+
+/// Resolves a claim's signer to the identity the credit's leaf binds under the requested kind.
+pub struct EnsureCreditClaimant;
+impl
+	frame_support::traits::EnsureOriginWithArg<RuntimeOrigin, indiv_pallet_nft_claims::ClaimantKind>
+	for EnsureCreditClaimant
+{
+	type Success = indiv_support::identity::AccountOrPerson<AccountId>;
+
+	fn try_origin(
+		o: RuntimeOrigin,
+		kind: &indiv_pallet_nft_claims::ClaimantKind,
+	) -> Result<Self::Success, RuntimeOrigin> {
+		let Ok(frame_system::RawOrigin::Signed(who)) = o.clone().into() else {
+			return Err(o);
+		};
+
+		// Neither kind replaces the signed origin, so `ChargePGAS` will still take effect.
+		match kind {
+			indiv_pallet_nft_claims::ClaimantKind::Account => {
+				Ok(indiv_support::identity::AccountOrPerson::Account(who))
+			},
+			indiv_pallet_nft_claims::ClaimantKind::Person => {
+				match indiv_pallet_alias_accounts::AccountToAlias::<Runtime>::get(&who) {
+					Some(info) => {
+						Ok(indiv_support::identity::AccountOrPerson::Person(info.ca.alias))
+					},
+					None => Err(o),
+				}
+			},
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin(
+		kind: &indiv_pallet_nft_claims::ClaimantKind,
+	) -> Result<RuntimeOrigin, ()> {
+		let who = AccountId::new([1u8; 32]);
+		if matches!(kind, indiv_pallet_nft_claims::ClaimantKind::Person) {
+			indiv_pallet_alias_accounts::AccountToAlias::<Runtime>::insert(
+				&who,
+				indiv_pallet_alias_accounts::AliasAccountInfo {
+					collection: *indiv_pallet_alias_accounts::PEOPLE_IDENTIFIER,
+					revision: 0,
+					ring: 0,
+					ca: indiv_support::traits::ContextualAlias {
+						context: [0u8; 32],
+						alias: [1u8; 32],
+					},
+				},
+			);
+		}
+
+		Ok(frame_system::RawOrigin::Signed(who).into())
+	}
+}
+
+parameter_types! {
+	/// Metered ceiling for one collection minter contract call, reserved by every claim and
+	/// refunded to what the call really consumed.
+	pub const NftClaimsSelectorWeightLimit: Weight = Weight::from_parts(5_000_000_000, 512 * 1024);
+	/// Maximum storage deposit a collection owner may pay for one minter call.
+	pub const NftClaimsSelectorDepositLimit: Balance = UNITS;
+}
+
+/// Executes a collection's registered minter contract for `pallet-nft-claims`.
+///
+/// The contract is called as the current collection owner, who pays its storage deposit up to
+/// [`NftClaimsSelectorDepositLimit`]. `PGasDeposit` takes that deposit in PGAS where the owner
+/// holds it and in the native token otherwise.
+/// The return must be one canonical ABI `uint32` naming the item to mint.
+pub struct NftClaimsCollectionSelector;
+impl NftClaimsCollectionSelector {
+	/// Calls a minter contract as `owner` under the selector's weight and deposit ceilings.
+	pub fn call(
+		owner: AccountId,
+		contract: sp_core::H160,
+		data: Vec<u8>,
+	) -> pallet_revive::ContractResult<pallet_revive::ExecReturnValue, Balance> {
+		use pallet_revive::{ExecConfig, TransactionLimits};
+
+		pallet_revive::Pallet::<Runtime>::bare_call(
+			RuntimeOrigin::signed(owner),
+			contract,
+			0u128.into(),
+			TransactionLimits::WeightAndDeposit {
+				weight_limit: NftClaimsSelectorWeightLimit::get(),
+				deposit_limit: NftClaimsSelectorDepositLimit::get(),
+			},
+			data,
+			&ExecConfig::new_substrate_tx(),
+		)
+	}
+}
+
+impl indiv_pallet_nft_claims::CollectionSelector<AccountId> for NftClaimsCollectionSelector {
+	fn max_weight() -> Weight {
+		NftClaimsSelectorWeightLimit::get()
+	}
+
+	fn validate(contract: sp_core::H160) -> sp_runtime::DispatchResult {
+		frame_support::ensure!(
+			pallet_revive::AccountInfo::<Runtime>::is_contract(&contract),
+			sp_runtime::DispatchError::Other("no contract code at the minter address")
+		);
+		Ok(())
+	}
+
+	fn select(
+		owner: AccountId,
+		contract: sp_core::H160,
+		collection: pallet_scarcity::CollectionId,
+		entropy: indiv_support::credit_trees::NftClaimCredit,
+	) -> Result<indiv_pallet_nft_claims::Selection, indiv_pallet_nft_claims::SelectionError> {
+		let cr = Self::call(owner, contract, minter_call_data(collection, entropy));
+		let weight_consumed = cr.weight_consumed;
+		let fail = |error: sp_runtime::DispatchError| indiv_pallet_nft_claims::SelectionError {
+			error,
+			weight_consumed,
+		};
+		let ret = cr.result.map_err(fail)?;
+		if ret.did_revert() {
+			log::debug!(
+				target: "runtime::nft-claims",
+				"minter contract {contract:?} reverted with 0x{}",
+				sp_core::hexdisplay::HexDisplay::from(&ret.data)
+			);
+			return Err(fail(sp_runtime::DispatchError::Other("minter contract reverted")));
+		}
+		let item = decode_minter_item(&ret.data).ok_or_else(|| {
+			log::debug!(
+				target: "runtime::nft-claims",
+				"minter contract {contract:?} returned no canonical uint32 item: 0x{}",
+				sp_core::hexdisplay::HexDisplay::from(&ret.data)
+			);
+			fail(sp_runtime::DispatchError::Other("minter contract returned no item"))
+		})?;
+		Ok(indiv_pallet_nft_claims::Selection { item, weight_consumed })
+	}
+}
+
+/// ABI-encode `mint(uint32 collection, bytes32 entropy)`.
+fn minter_call_data(
+	collection: pallet_scarcity::CollectionId,
+	entropy: indiv_support::credit_trees::NftClaimCredit,
+) -> Vec<u8> {
+	let mut data = Vec::with_capacity(68);
+	data.extend_from_slice(&sp_io::hashing::keccak_256(b"mint(uint32,bytes32)")[..4]);
+	data.extend_from_slice(&[0u8; 28]);
+	data.extend_from_slice(&collection.to_be_bytes());
+	data.extend_from_slice(&entropy);
+	data
+}
+
+/// ABI-decode one canonical `uint32` word, which is the only return a minter may give.
+fn decode_minter_item(data: &[u8]) -> Option<pallet_scarcity::ItemIndex> {
+	if data.len() != 32 || data[..28] != [0u8; 28] {
+		return None;
+	}
+	Some(u32::from_be_bytes(data[28..].try_into().ok()?))
+}
+
+impl indiv_pallet_nft_claims::Config for Runtime {
+	type WeightInfo = weights::indiv_pallet_nft_claims::WeightInfo<Runtime>;
+	type EnsureGameChainOrigin = EnsureNotifierSibling;
+	type MaxTreesPerMessage = ConstU32<32>;
+	type EnsureClaimant = EnsureCreditClaimant;
+	type Nfts = Scarcity;
+	type CollectionSelector = NftClaimsCollectionSelector;
+	type MaxProofNodes = ConstU32<16>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = benchmark_utils::NftClaimsBenchmarkHelper;
 }
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -764,6 +977,51 @@ pub mod benchmark_utils {
 					),
 				}),
 			)
+		}
+	}
+
+	pub struct NftClaimsBenchmarkHelper;
+
+	impl indiv_pallet_nft_claims::BenchmarkHelper<AccountId> for NftClaimsBenchmarkHelper {
+		fn prepare_collection(
+			owner: &AccountId,
+			collection: pallet_scarcity::CollectionId,
+			item: pallet_scarcity::ItemIndex,
+		) {
+			use frame_support::traits::fungible::Mutate;
+
+			let owner = owner.clone();
+			let _ =
+				Balances::set_balance(&owner, ExistentialDeposit::get().saturating_mul(1_000_000));
+
+			while pallet_scarcity::NextCollectionId::<Runtime>::get() <= collection {
+				Scarcity::do_create_collection(owner.clone()).expect("collection is created; qed");
+			}
+			while pallet_scarcity::Collections::<Runtime>::get(collection)
+				.expect("the collection was just created; qed")
+				.next_item_index
+				<= item
+			{
+				Scarcity::do_define_item(
+					owner.clone(),
+					collection,
+					pallet_scarcity::Transferability::Transferable,
+					alloc::vec::Vec::new(),
+				)
+				.expect("item is defined; qed");
+			}
+		}
+
+		fn prepare_contract(owner: &AccountId) -> sp_core::H160 {
+			use pallet_revive::call_builder::{Contract, VmBinaryModule};
+
+			Contract::<Runtime>::with_caller(
+				owner.clone(),
+				VmBinaryModule::dummy(),
+				alloc::vec::Vec::new(),
+			)
+			.expect("benchmark minter contract is deployed; qed")
+			.address
 		}
 	}
 }

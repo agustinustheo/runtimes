@@ -1583,9 +1583,12 @@ dependencies = [
  "indiv-pallet-alias-accounts",
  "indiv-pallet-dotns-gateway",
  "indiv-pallet-members-subscriber",
+ "indiv-pallet-nft-claims",
  "indiv-pallet-origin-restriction",
  "indiv-pallet-pgas",
+ "indiv-precompile-nft-claims",
  "indiv-precompile-personhood",
+ "indiv-precompile-scarcity",
  "indiv-support",
  "kusama-runtime-constants",
  "log",
@@ -1626,6 +1629,7 @@ dependencies = [
  "pallet-rc-migrator",
  "pallet-referenda",
  "pallet-revive",
+ "pallet-scarcity",
  "pallet-scheduler",
  "pallet-session",
  "pallet-staking",
@@ -7514,11 +7518,13 @@ dependencies = [
  "hex-literal",
  "indiv-support",
  "log",
+ "pallet-asset-conversion",
  "parity-scale-codec",
  "scale-info",
  "sp-core 41.0.0",
  "sp-runtime 47.0.0",
  "sp-trie 44.0.0",
+ "staging-xcm",
  "verifiable",
 ]
 
@@ -7580,6 +7586,7 @@ dependencies = [
  "sp-state-machine 0.51.0",
  "sp-statement-store",
  "sp-trie 44.0.0",
+ "staging-xcm",
  "verifiable",
 ]
 
@@ -7629,6 +7636,7 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "scale-info",
+ "serde",
  "sp-core 41.0.0",
  "sp-io 46.0.0",
  "sp-runtime 47.0.0",
@@ -7653,6 +7661,45 @@ dependencies = [
  "sp-runtime 47.0.0",
  "staging-xcm",
  "verifiable",
+]
+
+[[package]]
+name = "indiv-pallet-nft-claims"
+version = "0.1.0"
+dependencies = [
+ "binary-merkle-tree",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "indiv-support",
+ "log",
+ "pallet-scarcity",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 42.0.0",
+ "sp-core 41.0.0",
+ "sp-runtime 47.0.0",
+]
+
+[[package]]
+name = "indiv-pallet-nft-credits"
+version = "0.1.0"
+dependencies = [
+ "binary-merkle-tree",
+ "cumulus-primitives-core",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "indiv-pallet-game",
+ "indiv-pallet-score",
+ "indiv-support",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 42.0.0",
+ "sp-io 46.0.0",
+ "sp-runtime 47.0.0",
+ "staging-xcm",
 ]
 
 [[package]]
@@ -7778,6 +7825,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "indiv-precompile-nft-claims"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "indiv-pallet-nft-claims",
+ "pallet-revive",
+ "pallet-scarcity",
+]
+
+[[package]]
 name = "indiv-precompile-personhood"
 version = "0.1.0"
 dependencies = [
@@ -7787,6 +7845,16 @@ dependencies = [
  "log",
  "pallet-revive",
  "parity-scale-codec",
+]
+
+[[package]]
+name = "indiv-precompile-scarcity"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "pallet-revive",
+ "pallet-scarcity",
 ]
 
 [[package]]
@@ -11684,6 +11752,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-scarcity"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 42.0.0",
+ "sp-io 46.0.0",
+ "sp-runtime 47.0.0",
+]
+
+[[package]]
 name = "pallet-scheduler"
 version = "49.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12674,6 +12757,8 @@ dependencies = [
  "indiv-pallet-members",
  "indiv-pallet-members-notifier",
  "indiv-pallet-members-subscriber",
+ "indiv-pallet-nft-claims",
+ "indiv-pallet-nft-credits",
  "indiv-pallet-people",
  "indiv-support",
  "integration-tests-helpers",
@@ -12732,6 +12817,7 @@ dependencies = [
  "indiv-pallet-honour",
  "indiv-pallet-members",
  "indiv-pallet-members-notifier",
+ "indiv-pallet-nft-credits",
  "indiv-pallet-origin-restriction",
  "indiv-pallet-people",
  "indiv-pallet-people-lite",

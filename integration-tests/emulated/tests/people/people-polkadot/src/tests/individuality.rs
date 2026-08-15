@@ -104,3 +104,58 @@ fn people_ring_root_notification_activates_asset_hub_subscriber() {
 		);
 	});
 }
+
+/// A credit tree committed on People reaches Asset Hub's claims pallet.
+#[test]
+fn people_credit_tree_reaches_asset_hub_claims() {
+	type PeopleRuntime = <PeoplePolkadot as Chain>::Runtime;
+	type AssetHubRuntime = <AssetHubPolkadot as Chain>::Runtime;
+
+	let award_block: u32 = 42;
+	let tree = indiv_support::credit_trees::NftClaimCreditTree {
+		game_index: 3,
+		root: indiv_support::credit_trees::CreditProofNode([7u8; 32]),
+		leaf_count: 4,
+		timestamp: 1_700_000_000,
+	};
+
+	PeoplePolkadot::execute_with(|| {
+		// The sender sizes a batch against the egress channel, so the two-way HRMP precondition
+		// has to be represented before any tree can leave.
+		RelevantMessagingState::<PeopleRuntime>::put(MessagingStateSnapshot {
+			dmq_mqc_head: Default::default(),
+			relay_dispatch_queue_remaining_capacity: Default::default(),
+			ingress_channels: Vec::new(),
+			egress_channels: vec![(
+				AssetHubPolkadot::para_id(),
+				AbridgedHrmpChannel {
+					max_capacity: 1000,
+					max_total_size: 1_000_000,
+					max_message_size: 100_000,
+					msg_count: 0,
+					total_size: 0,
+					mqc_head: None,
+				},
+			)],
+		});
+
+		// A root committed by `on_initialize` over a past block's awards.
+		indiv_pallet_nft_credits::NftClaimCreditRoots::<PeopleRuntime>::insert(
+			award_block,
+			tree.clone(),
+		);
+
+		assert_ok!(people_polkadot_runtime::NftCredits::replay_credit_trees(
+			<PeoplePolkadot as Chain>::RuntimeOrigin::signed(PeoplePolkadot::account_id_of(ALICE)),
+			BoundedVec::try_from(vec![award_block]).unwrap(),
+		));
+	});
+
+	AssetHubPolkadot::execute_with(|| {
+		AssetHubPolkadot::assert_xcmp_queue_success(None);
+
+		let received = indiv_pallet_nft_claims::CreditTrees::<AssetHubRuntime>::get(award_block)
+			.expect("credit tree was delivered");
+		assert_eq!(received, tree);
+	});
+}

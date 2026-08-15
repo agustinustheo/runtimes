@@ -1557,6 +1557,11 @@ impl pallet_revive::Config for Runtime {
 		VestingPrecompile<Self>,
 		// Lets a contract verify a ring-VRF personhood proof without learning who the person is.
 		indiv_precompile_personhood::PersonhoodCheck<Self>,
+		// Exposes each Scarcity collection as an ERC-721 contract, and lets a collection owner
+		// register it for NFT claim credits.
+		indiv_precompile_scarcity::ScarcityCollection<Self, 0x0520>,
+		indiv_precompile_scarcity::ScarcityFactory<Self, 0x0521>,
+		indiv_precompile_nft_claims::NftClaimsMinter<Self, 0x0522>,
 	);
 	type AddressMapper = pallet_revive::AccountId32Mapper<Self>;
 	type RuntimeMemory = ConstU32<{ 128 * 1024 * 1024 }>;
@@ -1674,6 +1679,7 @@ construct_runtime!(
 		AssetConversion: pallet_asset_conversion = 55,
 		AssetsFreezer: pallet_assets_freezer::<Instance1> = 56,
 		AssetsHolder: pallet_assets_holder::<Instance1> = 57,
+		Scarcity: pallet_scarcity = 58,
 
 		// OpenGov stuff
 		Treasury: pallet_treasury = 60,
@@ -1709,6 +1715,7 @@ construct_runtime!(
 
 		// Individuality. Indices match the `next-asset-hub-paseo` reference runtime of
 		// `paritytech/individuality`.
+		NftClaims: indiv_pallet_nft_claims = 96,
 		MembersSubscriber: indiv_pallet_members_subscriber = 97,
 		AliasAccounts: indiv_pallet_alias_accounts = 98,
 		Pgas: indiv_pallet_pgas = 99,
@@ -1775,6 +1782,7 @@ pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 		// Origin modifiers.
 		(
 			(),
+			pallet_scarcity::extension::AsScarcity<Runtime>,
 			frame_system::AuthorizeCall<Runtime>,
 			indiv_pallet_pgas::AsPgas<Runtime>,
 			indiv_pallet_alias_accounts::AsRingAlias<Runtime>,
@@ -2025,9 +2033,11 @@ mod benches {
 		[indiv_pallet_alias_accounts, AliasAccounts]
 		[indiv_pallet_dotns_gateway, DotnsGateway]
 		[indiv_pallet_members_subscriber, MembersSubscriber]
+		[indiv_pallet_nft_claims, NftClaims]
 		[indiv_pallet_origin_restriction, OriginRestriction]
 		[indiv_pallet_pgas, Pgas]
 		[pallet_pgas_allowance, PgasAllowance]
+		[pallet_scarcity, Scarcity]
 	);
 
 	use frame_benchmarking::BenchmarkError;
@@ -2793,6 +2803,28 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 		}
 	}
 
+	impl pallet_scarcity::runtime_api::ScarcityApi<Block> for Runtime {
+		fn metadata_batch(
+			queries: Vec<pallet_scarcity::runtime_api::MetadataQuery>,
+		) -> Result<
+			Vec<pallet_scarcity::runtime_api::MetadataLayers>,
+			pallet_scarcity::runtime_api::BatchError,
+		> {
+			Scarcity::metadata_batch(queries)
+		}
+	}
+
+	impl indiv_pallet_nft_claims::runtime_api::NftClaimsApi<Block> for Runtime {
+		fn preview_mints(
+			queries: Vec<indiv_pallet_nft_claims::runtime_api::PreviewQuery>,
+		) -> Result<
+			Vec<indiv_pallet_nft_claims::runtime_api::PreviewOutcome>,
+			indiv_pallet_nft_claims::runtime_api::BatchError,
+		> {
+			NftClaims::preview_mints(queries)
+		}
+	}
+
 	impl cumulus_primitives_core::CollectCollationInfo<Block> for Runtime {
 		fn collect_collation_info(header: &<Block as BlockT>::Header) -> cumulus_primitives_core::CollationInfo {
 			ParachainSystem::collect_collation_info(header)
@@ -3222,6 +3254,7 @@ mod tests {
 		// it pins ordering, not the payment wrapper.
 		let indiv = [
 			"UnitTransactionExtension",
+			"AsScarcity",
 			"AsPgas",
 			"AsRingAlias",
 			"AsDotnsGateway",
@@ -3233,6 +3266,14 @@ mod tests {
 		for id in indiv {
 			assert!(v1.contains(&id), "version 1 must carry `{id}`");
 		}
+
+		// `AsScarcity` replaces the origin with `Origin::Nft` and takes the item out of storage,
+		// so it has to settle before the nonce and payment checks observe the transaction.
+		// Running it after payment would let `SkipCheckIfFeeless` see the replaced origin, which
+		// makes a purse holding no balance untransactable.
+		let pos = |id: &str| v1.iter().position(|x| *x == id).expect("identifier is present; qed");
+		assert!(pos("AsScarcity") < pos("CheckNonce"));
+		assert!(pos("AsScarcity") < pos("ChargeAssetTxPayment"));
 	}
 
 	/// We can fit at least 1000 transfers in a block.

@@ -312,8 +312,8 @@ impl indiv_pallet_members::Config for Runtime {
 pub struct AccountContexts;
 impl frame_support::traits::Contains<Context> for AccountContexts {
 	fn contains(context: &Context) -> bool {
-		context == &indiv_pallet_score::SCORE_CONTEXT ||
-			context == &indiv_pallet_resources::RESOURCES_CONTEXT
+		context == &indiv_pallet_score::SCORE_CONTEXT
+			|| context == &indiv_pallet_resources::RESOURCES_CONTEXT
 	}
 }
 
@@ -509,12 +509,7 @@ impl indiv_pallet_game::Config for Runtime {
 	type TicketSignature = MultiSignature;
 	type MaxGameSchedules = ConstU32<12>;
 	type MaxAttendanceHistoryDepth = ConstU32<12>;
-	// Keep enough space for the credits a full People block can award. The Polkadot `report` PoV
-	// weight permits up to 2,940 credits per normal block, so leave a small margin above that
-	// integrity floor. This value must be revisited when Polkadot reference weights are generated.
-	type MaxCreditsPerBlock = ConstU32<3000>;
-	type MaxCreditBlocksPerClaimant = ConstU32<32>;
-	type MaxRetainedAwardBlocks = ConstU32<256>;
+	type NftClaimCredits = NftCredits;
 	type DefaultPhaseDurations = GamePhaseDurations;
 	type AccountSignature = Signature;
 	type PlayerStatementLimit = PlayerStatementLimit;
@@ -529,6 +524,32 @@ impl indiv_pallet_game::Config for Runtime {
 	type AirdropSource = GameAirdropSource;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::GamePalletBenchmarkHelper;
+}
+
+parameter_types! {
+	/// The chain the credit trees are delivered to, which is where `pallet-nft-claims` and the
+	/// collectibles it mints live.
+	pub const NftClaimsParaId: ParaId =
+		ParaId::new(polkadot_runtime_constants::system_parachain::ASSET_HUB_ID);
+	/// Per-tree weight surcharge for executing `receive_credit_trees` on Asset Hub, charged to
+	/// the caller of `replay_credit_trees`.
+	pub NftClaimsRemoteWeight: Weight = Weight::from_parts(150_000_000, 2_600);
+}
+
+impl indiv_pallet_nft_credits::Config for Runtime {
+	type WeightInfo = weights::indiv_pallet_nft_credits::WeightInfo<Runtime>;
+	type MaxCreditsPerBlock = ConstU32<3000>;
+	type XcmRouter = crate::xcm_config::XcmRouter;
+	type NftClaimsParaId = NftClaimsParaId;
+	type NftClaimsPalletIndex = ConstU8<96>;
+	type ChannelInfo = ParachainSystem;
+	type MaxQueuedCreditTrees = ConstU32<256>;
+	type MaxCreditTreesPerMessage = ConstU32<32>;
+	type NftClaimsRemoteWeight = NftClaimsRemoteWeight;
+	type MaxCreditBlocksPerClaimant = ConstU32<32>;
+	type MaxRetainedAwardBlocks = ConstU32<256>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = benchmark_utils::NftCreditsBenchmarkHelper;
 }
 
 parameter_types! {
@@ -813,13 +834,15 @@ pub enum RestrictedEntity {
 impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> for RestrictedEntity {
 	fn allowance(&self) -> Allowance<Balance> {
 		match self {
-			RestrictedEntity::PersonalAlias(_) | RestrictedEntity::PersonalIdentity(_) =>
+			RestrictedEntity::PersonalAlias(_) | RestrictedEntity::PersonalIdentity(_) => {
 				Allowance {
 					max: PEOPLE_IDENTITY_AND_ALIAS_ALLOWANCE_MAX,
 					recovery_per_block: PEOPLE_IDENTITY_AND_ALIAS_ALLOWANCE_RECOVERY,
-				},
-			RestrictedEntity::AccountParticipant(_) =>
-				Allowance { max: 0, recovery_per_block: ACCOUNT_PARTICIPANT_RECOVERY },
+				}
+			},
+			RestrictedEntity::AccountParticipant(_) => {
+				Allowance { max: 0, recovery_per_block: ACCOUNT_PARTICIPANT_RECOVERY }
+			},
 			RestrictedEntity::LitePerson(_) | RestrictedEntity::LiteAlias(_) => Allowance {
 				max: LITE_PERSON_ALLOWANCE_MAX,
 				recovery_per_block: LITE_PERSON_ALLOWANCE_RECOVERY,
@@ -832,16 +855,21 @@ impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> fo
 		use indiv_pallet_people_lite::Origin::*;
 		use indiv_pallet_score::Origin::*;
 		match origin_caller {
-			OriginCaller::People(PersonalIdentity(id)) =>
-				Some(RestrictedEntity::PersonalIdentity(*id)),
-			OriginCaller::People(PersonalAlias(rev_ca)) =>
-				Some(RestrictedEntity::PersonalAlias(rev_ca.ca.alias)),
-			OriginCaller::Score(AccountParticipant(account_id)) =>
-				Some(RestrictedEntity::AccountParticipant(account_id.clone())),
-			OriginCaller::PeopleLite(LitePerson(account_id)) =>
-				Some(RestrictedEntity::LitePerson(account_id.clone())),
-			OriginCaller::PeopleLite(LiteAlias(rev_ca)) =>
-				Some(RestrictedEntity::LiteAlias(rev_ca.ca.alias)),
+			OriginCaller::People(PersonalIdentity(id)) => {
+				Some(RestrictedEntity::PersonalIdentity(*id))
+			},
+			OriginCaller::People(PersonalAlias(rev_ca)) => {
+				Some(RestrictedEntity::PersonalAlias(rev_ca.ca.alias))
+			},
+			OriginCaller::Score(AccountParticipant(account_id)) => {
+				Some(RestrictedEntity::AccountParticipant(account_id.clone()))
+			},
+			OriginCaller::PeopleLite(LitePerson(account_id)) => {
+				Some(RestrictedEntity::LitePerson(account_id.clone()))
+			},
+			OriginCaller::PeopleLite(LiteAlias(rev_ca)) => {
+				Some(RestrictedEntity::LiteAlias(rev_ca.ca.alias))
+			},
 			_ => None,
 		}
 	}
@@ -860,18 +888,18 @@ impl ContainsPair<RestrictedEntity, RuntimeCall> for OperationAllowedOneTimeExce
 		match entity {
 			RestrictedEntity::AccountParticipant(_) => matches!(
 				call,
-				RuntimeCall::Score(cash_out { .. }) |
-					RuntimeCall::Score(redeem_credit { .. }) |
-					RuntimeCall::Score(register { .. }) |
-					RuntimeCall::Game(sign_up_with_account { .. }) |
-					RuntimeCall::Game(report { .. }) |
-					RuntimeCall::Game(offboard { .. }) |
-					RuntimeCall::Game(claim_airdrop { .. })
+				RuntimeCall::Score(cash_out { .. })
+					| RuntimeCall::Score(redeem_credit { .. })
+					| RuntimeCall::Score(register { .. })
+					| RuntimeCall::Game(sign_up_with_account { .. })
+					| RuntimeCall::Game(report { .. })
+					| RuntimeCall::Game(offboard { .. })
+					| RuntimeCall::Game(claim_airdrop { .. })
 			),
-			RestrictedEntity::PersonalAlias(_) |
-			RestrictedEntity::PersonalIdentity(_) |
-			RestrictedEntity::LitePerson(_) |
-			RestrictedEntity::LiteAlias(_) => false,
+			RestrictedEntity::PersonalAlias(_)
+			| RestrictedEntity::PersonalIdentity(_)
+			| RestrictedEntity::LitePerson(_)
+			| RestrictedEntity::LiteAlias(_) => false,
 		}
 	}
 }
@@ -936,8 +964,8 @@ impl BulletinDataStore {
 	/// interior, where a successful local send would otherwise remain a silent remote no-op.
 	pub(crate) fn bulletin_chain_location() -> Result<Location, DispatchError> {
 		let destination = dynamic_params::bulletin_storage::BulletinChainLocation::get();
-		if destination.parents == 1 &&
-			matches!(destination.interior.as_slice(), [Junction::Parachain(_)])
+		if destination.parents == 1
+			&& matches!(destination.interior.as_slice(), [Junction::Parachain(_)])
 		{
 			Ok(destination)
 		} else {
@@ -1581,6 +1609,38 @@ pub mod benchmark_utils {
 				)),
 				RuntimeCall::Score(indiv_pallet_score::Call::cash_out {}),
 			)
+		}
+	}
+
+	pub struct NftCreditsBenchmarkHelper;
+
+	impl indiv_pallet_nft_credits::benchmarking::BenchmarkHelper for NftCreditsBenchmarkHelper {
+		fn open_nft_claims_channel(max_message_size: u32) {
+			use cumulus_pallet_parachain_system::RelevantMessagingState;
+			use cumulus_primitives_core::relay_chain::AbridgedHrmpChannel;
+
+			let channel = AbridgedHrmpChannel {
+				max_capacity: 1000,
+				max_total_size: 1_000_000,
+				max_message_size,
+				msg_count: 0,
+				total_size: 0,
+				mqc_head: None,
+			};
+			let claims_chain =
+				<Runtime as indiv_pallet_nft_credits::Config>::NftClaimsParaId::get();
+			let mut messaging_state = RelevantMessagingState::<Runtime>::get().unwrap_or(
+				cumulus_pallet_parachain_system::relay_state_snapshot::MessagingStateSnapshot {
+					dmq_mqc_head: Default::default(),
+					relay_dispatch_queue_remaining_capacity: Default::default(),
+					ingress_channels: Vec::new(),
+					egress_channels: Vec::new(),
+				},
+			);
+			messaging_state.egress_channels.retain(|(id, _)| *id != claims_chain);
+			messaging_state.egress_channels.push((claims_chain, channel));
+			messaging_state.egress_channels.sort_by_key(|(id, _)| *id);
+			RelevantMessagingState::<Runtime>::put(messaging_state);
 		}
 	}
 }
