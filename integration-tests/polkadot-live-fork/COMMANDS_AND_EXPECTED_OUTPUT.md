@@ -157,7 +157,7 @@ All four files must exist and must have nonzero sizes.
 
 ## 6. Start the local network in Terminal 1
 
-Run:
+Run in Terminal 1:
 
 ```sh
 make spawn
@@ -203,7 +203,7 @@ Run each command separately. Continue only if the command exits with status zero
 
 ## 8. Verify the live-fork boundaries
 
-Run:
+Run in Terminal 2:
 
 ```sh
 make verify-fork
@@ -232,7 +232,7 @@ difference.
 
 ## 9. Verify the state before the upgrades
 
-Run:
+Run in Terminal 2:
 
 ```sh
 make verify
@@ -267,7 +267,7 @@ The command includes a 24-second block-production check.
 
 ## 10. Upgrade Asset Hub and People
 
-Run:
+Run in Terminal 2:
 
 ```sh
 CARGO_BUILD_JOBS=2 make upgrade
@@ -309,7 +309,7 @@ default timeout is 1,200 seconds for each upgrade invocation.
 
 ## 11. Verify the final state
 
-Run:
+Run in Terminal 2:
 
 ```sh
 make verify-upgrade
@@ -350,7 +350,7 @@ Terminal 1 can take approximately 60 seconds to return to the shell.
 
 ## 13. Optional shutdown check
 
-Run after Terminal 1 exits:
+Run in Terminal 2 after Terminal 1 exits:
 
 ```sh
 for port in 9944 9910 9914 9920; do
