@@ -531,23 +531,20 @@ parameter_types! {
 	/// collectibles it mints live.
 	pub const NftClaimsParaId: ParaId =
 		ParaId::new(polkadot_runtime_constants::system_parachain::ASSET_HUB_ID);
-	/// Per-tree weight surcharge for executing `receive_credit_trees` on Asset Hub, charged to
-	/// the caller of `replay_credit_trees`.
-	pub NftClaimsRemoteWeight: Weight = Weight::from_parts(150_000_000, 2_600);
 }
 
 impl indiv_pallet_nft_credits::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_nft_credits::WeightInfo<Runtime>;
-	type MaxCreditsPerBlock = ConstU32<3000>;
+	type MaxCreditsPerBlock = ConstU32<1500>;
 	type XcmRouter = crate::xcm_config::XcmRouter;
 	type NftClaimsParaId = NftClaimsParaId;
 	type NftClaimsPalletIndex = ConstU8<96>;
 	type ChannelInfo = ParachainSystem;
 	type MaxQueuedCreditTrees = ConstU32<256>;
 	type MaxCreditTreesPerMessage = ConstU32<32>;
-	type NftClaimsRemoteWeight = NftClaimsRemoteWeight;
+	type NftClaimsRemoteWeight = dynamic_params::nft_credits::NftClaimsRemoteWeight;
 	type MaxCreditBlocksPerClaimant = ConstU32<32>;
-	type MaxRetainedAwardBlocks = ConstU32<256>;
+	type MaxRetainedAwardBlocks = ConstU32<1024>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::NftCreditsBenchmarkHelper;
 }

@@ -94,6 +94,16 @@ pub mod dynamic_params {
 		#[codec(index = 7)]
 		pub static BulletinTransactionStoragePalletIndex: u8 = 40;
 	}
+
+	/// Credit-tree delivery economics for `pallet-nft-credits`.
+	#[dynamic_pallet_params]
+	#[codec(index = 2)]
+	pub mod nft_credits {
+		/// Per-tree weight surcharge for executing `receive_credit_trees` on Asset Hub, charged to
+		/// the caller of `replay_credit_trees`.
+		#[codec(index = 0)]
+		pub static NftClaimsRemoteWeight: Weight = Weight::from_parts(150_000_000, 2_600);
+	}
 }
 
 /// A [`StatementAllowance`] stored as a bounded dynamic parameter.

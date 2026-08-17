@@ -364,6 +364,31 @@ fn individuality_storage_parameters_are_governance_mutable() {
 			30 * 60,
 		);
 
+		assert_ok!(Parameters::set_parameter(
+			RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
+				1,
+				[
+					Parachain(ASSET_HUB_ID),
+					Plurality {
+						id: BodyId::Index(TECHNICAL_MAINTENANCE_INDEX),
+						part: BodyPart::Voice,
+					},
+				],
+			))),
+			RuntimeParameters::NftCredits(
+				dynamic_params::nft_credits::Parameters::NftClaimsRemoteWeight(
+					dynamic_params::nft_credits::NftClaimsRemoteWeight,
+					Some(frame_support::weights::Weight::from_parts(200_000_000, 4_000)),
+				),
+			),
+		));
+		assert_eq!(
+			<<Runtime as indiv_pallet_nft_credits::Config>::NftClaimsRemoteWeight as Get<
+				frame_support::weights::Weight,
+			>>::get(),
+			frame_support::weights::Weight::from_parts(200_000_000, 4_000),
+		);
+
 		assert_noop!(
 			Parameters::set_parameter(
 				RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(

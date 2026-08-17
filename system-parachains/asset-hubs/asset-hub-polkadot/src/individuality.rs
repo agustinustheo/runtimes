@@ -358,19 +358,27 @@ impl indiv_pallet_origin_restriction::Config for Runtime {
 }
 
 parameter_types! {
-	pub const ScarcityDepositBase: Balance = system_para_deposit(1, 0);
-	pub const ScarcityDepositPerByte: Balance = system_para_deposit(0, 1);
 	pub const ScarcityHoldReason: RuntimeHoldReason =
 		RuntimeHoldReason::Scarcity(pallet_scarcity::HoldReason::StorageDeposit);
 }
 
-/// Storage price shared by every Scarcity deposit converter: a per-record base plus a
-/// per-byte price over the footprint's logical encoded size.
-pub type ScarcityStoragePrice =
-	LinearStoragePrice<ScarcityDepositBase, ScarcityDepositPerByte, Balance>;
+/// Storage price for a Scarcity collection, item definition or minted instance.
+pub type ScarcityStoragePrice = LinearStoragePrice<
+	dynamic_params::individuality::ScarcityDepositBase,
+	dynamic_params::individuality::ScarcityDepositPerByte,
+	Balance,
+>;
+
+/// Storage price for one Scarcity metadata entry.
+pub type ScarcityMetadataStoragePrice = LinearStoragePrice<
+	dynamic_params::individuality::ScarcityMetadataDepositBase,
+	dynamic_params::individuality::ScarcityDepositPerByte,
+	Balance,
+>;
 
 impl pallet_scarcity::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	// TODO: switch to `weights::pallet_scarcity::WeightInfo<Runtime>`
 	type WeightInfo = pallet_scarcity::weights::SubstrateWeight<Runtime>;
 	type UnixTime = Timestamp;
 	type Balance = Balance;
@@ -384,12 +392,12 @@ impl pallet_scarcity::Config for Runtime {
 	type CollectionDeposit = ScarcityStoragePrice;
 	type ItemDeposit = ScarcityStoragePrice;
 	type InstanceDeposit = ScarcityStoragePrice;
-	type MetadataDeposit = ScarcityStoragePrice;
+	type MetadataDeposit = ScarcityMetadataStoragePrice;
 	type MaxKeyLen = ConstU32<32>;
 	type MaxValueLen = ConstU32<256>;
-	type MaxInstanceMetadata = ConstU32<100>;
-	type LockPeriod = ConstU64<60>;
-	type MaxTransferPriority = ConstU64<1_000_000>;
+	type MaxInstanceMetadata = ConstU32<32>;
+	type LockPeriod = dynamic_params::individuality::ScarcityLockPeriod;
+	type MaxTransferPriority = dynamic_params::individuality::ScarcityMaxTransferPriority;
 	type OnCollectionDeleted = indiv_pallet_nft_claims::ClearCollectionMinter<Runtime>;
 	type OnPurseOccupied = indiv_precompile_scarcity::MapPurseKey<Runtime>;
 	type MetadataPolicy = indiv_precompile_scarcity::Erc721MetadataPolicy<Runtime>;
@@ -451,19 +459,12 @@ impl
 	}
 }
 
-parameter_types! {
-	/// Metered ceiling for one collection minter contract call, reserved by every claim and
-	/// refunded to what the call really consumed.
-	pub const NftClaimsSelectorWeightLimit: Weight = Weight::from_parts(5_000_000_000, 512 * 1024);
-	/// Maximum storage deposit a collection owner may pay for one minter call.
-	pub const NftClaimsSelectorDepositLimit: Balance = UNITS;
-}
-
 /// Executes a collection's registered minter contract for `pallet-nft-claims`.
 ///
 /// The contract is called as the current collection owner, who pays its storage deposit up to
-/// [`NftClaimsSelectorDepositLimit`]. `PGasDeposit` takes that deposit in PGAS where the owner
-/// holds it and in the native token otherwise.
+/// [`dynamic_params::individuality::NftClaimsSelectorDepositLimit`]. `PGasDeposit` takes that
+/// deposit in PGAS where the owner holds it and in the native token otherwise, so a claim fails
+/// once the owner can pay neither.
 /// The return must be one canonical ABI `uint32` naming the item to mint.
 pub struct NftClaimsCollectionSelector;
 impl NftClaimsCollectionSelector {
@@ -480,8 +481,8 @@ impl NftClaimsCollectionSelector {
 			contract,
 			0u128.into(),
 			TransactionLimits::WeightAndDeposit {
-				weight_limit: NftClaimsSelectorWeightLimit::get(),
-				deposit_limit: NftClaimsSelectorDepositLimit::get(),
+				weight_limit: dynamic_params::individuality::NftClaimsSelectorWeightLimit::get(),
+				deposit_limit: dynamic_params::individuality::NftClaimsSelectorDepositLimit::get(),
 			},
 			data,
 			&ExecConfig::new_substrate_tx(),
@@ -491,7 +492,7 @@ impl NftClaimsCollectionSelector {
 
 impl indiv_pallet_nft_claims::CollectionSelector<AccountId> for NftClaimsCollectionSelector {
 	fn max_weight() -> Weight {
-		NftClaimsSelectorWeightLimit::get()
+		dynamic_params::individuality::NftClaimsSelectorWeightLimit::get()
 	}
 
 	fn validate(contract: sp_core::H160) -> sp_runtime::DispatchResult {
