@@ -2,6 +2,17 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
+required_open_files=4096
+current_open_files="$(ulimit -Sn)"
+if [[ "$current_open_files" != "unlimited" ]] && (( current_open_files < required_open_files )); then
+	if ! ulimit -Sn "$required_open_files" 2>/dev/null; then
+		echo "Zombie Bite needs at least $required_open_files open files; current soft limit is $current_open_files" >&2
+		echo "Run 'ulimit -n $required_open_files' in this terminal and retry." >&2
+		exit 1
+	fi
+	echo "Raised the open-file limit from $current_open_files to $(ulimit -Sn)"
+fi
+
 "$HARNESS_DIR/scripts/setup.sh"
 require_file "$ASSET_HUB_WASM"
 require_file "$PEOPLE_WASM"

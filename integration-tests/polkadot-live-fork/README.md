@@ -13,6 +13,11 @@ The file `versions.env` pins Zombie Bite and Doppelganger. The pinned patch adds
 
 The default database is pruned ParityDB. This configuration prevents the oversized RocksDB pruning-journal failure that occurs on macOS. This configuration also keeps the captured current state that the upgrades need.
 
+For the test design, measured timing, and recorded results, see
+[TEST_PROCEDURE.md](TEST_PROCEDURE.md). For copyable commands and shortened output samples, see
+[COMMANDS_AND_EXPECTED_OUTPUT.md](COMMANDS_AND_EXPECTED_OUTPUT.md). The detailed recovery and patch
+notes remain in [RUNBOOK.md](RUNBOOK.md).
+
 ## Run the complete lifecycle
 
 Build the two candidate WASMs first. Both candidates must use a `spec_version` that is higher than the captured live versions.
