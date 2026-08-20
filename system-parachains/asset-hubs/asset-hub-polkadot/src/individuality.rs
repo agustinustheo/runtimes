@@ -43,8 +43,8 @@
 //!   how a contract or a dApp learns "this account belongs to a distinct person" without learning
 //!   who.
 //! * [`indiv_precompile_personhood`] exposes that check to `pallet-revive` contracts.
-//! * [`indiv_pallet_pgas`] lets a proven person periodically claim PGAS, a non-transferable
-//!   allowance asset. [`pallet_pgas_allowance`] then lets PGAS pay the fees of contract calls, and
+//! * [`indiv_pallet_pgas`] lets a proven person periodically claim PGAS, an execution allowance
+//!   asset. [`pallet_pgas_allowance`] then lets PGAS pay the fees of contract calls, and
 //!   `pallet_revive::PGasDeposit` makes contract storage deposits PGAS-denominated — so a person
 //!   can use contracts without holding DOT.
 //! * [`indiv_pallet_dotns_gateway`] is the personhood-gated front door to the dotNS name registry:
@@ -154,7 +154,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNotifierSibling {
 }
 
 impl indiv_pallet_members_subscriber::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_members_subscriber::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_members_subscriber::weights::SubstrateWeight<Runtime>;
 	type Crypto = indiv_support::crypto::BandersnatchVrfVerifiable;
 	type XcmSender = xcm_config::XcmRouter;
 	type RingRootsNotifier = RingRootsNotifierEndpoint;
@@ -164,18 +164,19 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type MaxRingRootsPerCollection = ConstU32<100>;
 	type EnsureNotifierOrigin = EnsureNotifierSibling;
 	type EnsureTerminationOrigin = EitherOfDiverse<EnsureRoot<AccountId>, EnsureNotifierSibling>;
-	type MaxCollections = ConstU32<10>;
+	type MaxCollections = ConstU32<20>;
 	type UnixTime = Timestamp;
 	type ReplayCooldownSeconds = ConstU64<60>;
 	type MaxUpdatesPerBatch = ConstU32<10>;
 	type ReplayWarningThreshold = ConstU32<5>;
 	type ReplayAbandonThreshold = ConstU32<10>;
 	type MaxRecentRootsPerRing = ConstU32<3>;
-	type OffchainWorkerInterval = ConstU32<1>;
+	type OldRootRetentionDuration = ConstU64<600>;
+	type OffchainWorkerInterval = ConstU32<3>;
 }
 
 impl indiv_pallet_alias_accounts::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_alias_accounts::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_alias_accounts::weights::SubstrateWeight<Runtime>;
 	type MemberService = MembersSubscriber;
 	type UnixTime = Timestamp;
 	/// The default proof-validity window is five minutes after the timestamp it commits to.
