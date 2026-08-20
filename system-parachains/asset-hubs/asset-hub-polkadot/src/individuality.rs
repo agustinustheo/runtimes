@@ -43,8 +43,8 @@
 //!   how a contract or a dApp learns "this account belongs to a distinct person" without learning
 //!   who.
 //! * [`indiv_precompile_personhood`] exposes that check to `pallet-revive` contracts.
-//! * [`indiv_pallet_pgas`] lets a proven person periodically claim PGAS, a non-transferable
-//!   allowance asset. [`pallet_pgas_allowance`] then lets PGAS pay the fees of contract calls, and
+//! * [`indiv_pallet_pgas`] lets a proven person periodically claim PGAS, an execution allowance
+//!   asset. [`pallet_pgas_allowance`] then lets PGAS pay the fees of contract calls, and
 //!   `pallet_revive::PGasDeposit` makes contract storage deposits PGAS-denominated — so a person
 //!   can use contracts without holding DOT.
 //! * [`indiv_pallet_dotns_gateway`] is the personhood-gated front door to the dotNS name registry:
@@ -63,7 +63,7 @@
 //!    `MembersNotifier::subscribe` naming this chain and the `MembersSubscriber` pallet index (97);
 //!    there is no local call to make. Until the first batch of roots arrives, every personhood
 //!    proof on this chain fails. Requires an open HRMP channel in both directions.
-//! 3. `DotnsGateway::set_dispatcher_address` (root) — point the gateway at the deployed
+//! 3. `DotnsGateway::set_dispatcher_address` (Fellowship or root) — point the gateway at the deployed
 //!    `RootGatewayDispatcher` contract. `pallet-dotns-gateway` cannot register any name until this
 //!    is set, so the dotNS registry contract has to be deployed first.
 //! 4. `AliasAccounts::set_alias_fee` (Fellowship or root) — configure the asset and amount charged
@@ -155,7 +155,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNotifierSibling {
 }
 
 impl indiv_pallet_members_subscriber::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_members_subscriber::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_members_subscriber::weights::SubstrateWeight<Runtime>;
 	type Crypto = indiv_support::crypto::BandersnatchVrfVerifiable;
 	type XcmSender = xcm_config::XcmRouter;
 	type RingRootsNotifier = RingRootsNotifierEndpoint;
@@ -165,18 +165,19 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type MaxRingRootsPerCollection = ConstU32<100>;
 	type EnsureNotifierOrigin = EnsureNotifierSibling;
 	type EnsureTerminationOrigin = EitherOfDiverse<EnsureRoot<AccountId>, EnsureNotifierSibling>;
-	type MaxCollections = ConstU32<10>;
+	type MaxCollections = ConstU32<20>;
 	type UnixTime = Timestamp;
 	type ReplayCooldownSeconds = ConstU64<60>;
 	type MaxUpdatesPerBatch = ConstU32<10>;
 	type ReplayWarningThreshold = ConstU32<5>;
 	type ReplayAbandonThreshold = ConstU32<10>;
 	type MaxRecentRootsPerRing = ConstU32<3>;
-	type OffchainWorkerInterval = ConstU32<1>;
+	type OldRootRetentionDuration = ConstU64<600>;
+	type OffchainWorkerInterval = ConstU32<3>;
 }
 
 impl indiv_pallet_alias_accounts::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_alias_accounts::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_alias_accounts::weights::SubstrateWeight<Runtime>;
 	type MemberService = MembersSubscriber;
 	type UnixTime = Timestamp;
 	/// The default proof-validity window is five minutes after the timestamp it commits to.
@@ -286,9 +287,7 @@ impl indiv_pallet_dotns_gateway::Config for Runtime {
 	type MaxFutureSkewSeconds = dynamic_params::individuality::DotnsMaxFutureSkewSeconds;
 	type UnixTime = Timestamp;
 	type AttestationAllowanceManager = RootOrFellows;
-	// This controls the RootGateway dispatcher contract, rather than an Individuality allowance;
-	// retain root until its governance surface has its own explicit review.
-	type DispatcherAddressManager = EnsureRoot<AccountId>;
+	type DispatcherAddressManager = RootOrFellows;
 	type AttestationSignature = Signature;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::DotnsGatewayBenchHelper;

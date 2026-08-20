@@ -207,8 +207,6 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_version: 2_003_002,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
-	// Not bumped: the Individuality pipeline is a *new* extension version (`TxExtensionV1`), and
-	// version 0 is unchanged, so transactions built against the current metadata stay valid.
 	transaction_version: 15,
 	system_version: 1,
 };
@@ -1400,13 +1398,13 @@ pub mod dynamic_params {
 		/// not been sized for Polkadot. TODO: double-check it for Polkadot together with
 		/// `MaxClaimsPerPeriodPerPerson`.
 		#[codec(index = 0)]
-		pub static PgasClaimAmount: Balance = 5000 * crate::individuality::PgasMinBalance::get();
+		pub static PgasClaimAmount: Balance = 60 * crate::individuality::PgasMinBalance::get();
 		/// Maximum PGAS claims per period for a full person.
 		#[codec(index = 1)]
 		pub static MaxClaimsPerPeriodPerPerson: u32 = 100;
 		/// Maximum PGAS claims per period for a lite person.
 		#[codec(index = 2)]
-		pub static MaxClaimsPerPeriodPerLitePerson: u32 = 40;
+		pub static MaxClaimsPerPeriodPerLitePerson: u32 = 50;
 		/// Maximum PGAS claim records removed by one cleanup call.
 		#[codec(index = 3)]
 		pub static MaxPgasClaimRecordCleanupPerCall: u32 = 20;
@@ -1809,7 +1807,6 @@ pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 			pallet_scarcity::extension::AsScarcity<Runtime>,
 			frame_system::AuthorizeCall<Runtime>,
 			indiv_pallet_pgas::AsPgas<Runtime>,
-			indiv_pallet_alias_accounts::AsRingAlias<Runtime>,
 			indiv_pallet_dotns_gateway::AsDotnsGateway<Runtime>,
 		),
 		// General checks and operations.
@@ -3093,7 +3090,7 @@ mod tests {
 		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
 			assert_eq!(
 				dynamic_params::individuality::PgasClaimAmount::get(),
-				5000 * individuality::PgasMinBalance::get(),
+				60 * individuality::PgasMinBalance::get(),
 			);
 			assert_noop!(
 				Parameters::set_parameter(
@@ -3300,7 +3297,6 @@ mod tests {
 			"UnitTransactionExtension",
 			"AsScarcity",
 			"AsPgas",
-			"AsRingAlias",
 			"AsDotnsGateway",
 			"RestrictOrigins",
 		];

@@ -61,18 +61,6 @@
 //!   produce, since those origins pay no fee from an account.
 //! * [`indiv_pallet_relay_randomness`] surfaces relay chain randomness, used to seed airdrop draws.
 //!
-//! # Not deployed here
-//!
-//! `indiv-pallet-storage-initialization` is a bootstrapping pallet for fresh development chains
-//! (it funds hard-coded development accounts and seeds a first game), so it has no place on
-//! Polkadot.
-//!
-//! `indiv-pallet-mob-rule`, the juror pallet, is not deployed either. Its cases can only be opened
-//! through its `StatementOracle` implementation, and the only pallet that calls it in the reference
-//! runtime is `indiv-pallet-proof-of-ink`, which is not deployed here — so no case could ever be
-//! created and the whole pallet would be inert. It has to come back together with a pallet that
-//! judges statements.
-//!
 //! # Deployment steps
 //!
 //! Enacting the runtime upgrade activates none of this on its own: the ring-VRF machinery is inert
@@ -97,23 +85,19 @@
 //!    registered locally. `CreateOrigin` is `EnsureNever` on this chain, so root is the only way.
 //!    This is a prerequisite for step 6, which rejects an unknown asset.
 //! 5. `Assets::force_set_metadata` (root) — set the HOLLAR asset metadata after creating it.
-//! 6. `AssetRate::create` (root) — create the HOLLAR conversion rate before any coinage activity.
-//!    [`indiv_pallet_coinage::Config::ConversionToAssetBalance`] uses `AssetRate`, so conversions
-//!    fail until the rate exists.
-//! 7. `Coinage::set_underlying_asset_id` (Fellowship or root) — nominate the asset backing every
-//!    coin. It can only be set once, and must be the asset described by [`StableAssetLocation`];
-//!    see `Config::UnderlyingAssetUnit` for why.
-//! 8. Fund the pallet-derived accounts that pay out: [`GameAirdropSource`] (`pop/gads`) with the
+//! 6. Mint the coinage pallet account at least HOLLAR's minimum balance, then call
+//!    `Coinage::create_sufficient_instance` (Fellowship or root) with [`StableAssetLocation`] and
+//!    its `$0.01` asset unit. The public pallet uses explicit, permanent instances rather than a
+//!    single globally selected backing asset.
+//! 7. Fund the pallet-derived accounts that pay out: [`GameAirdropSource`] (`pop/gads`) with the
 //!    airdrop asset, and the [`ScorePotId`] (`scorepot`) pot for score cash-outs. Both are derived
 //!    accounts nobody controls, so they can only be funded by transfer.
-//! 9. `Game::schedule_games` (Fellowship or root) — no meetup game exists until one is scheduled,
+//! 8. `Game::schedule_games` (Fellowship or root) — no meetup game exists until one is scheduled,
 //!    so `pallet-game` and `pallet-score` stay dormant without this.
-//! 10. `People::create_people_collection` (Fellowship or root) — create the people collection; this
-//!     is not done by the runtime upgrade and must precede people onboarding.
+//! 9. `PeopleLite::set_attestation_allowance` (Fellowship or root) — admit a device-attestation
+//!    provider.
 //!
-//! Optional, per-provider: `PeopleLite::set_attestation_allowance` (Fellowship or root) to admit
-//! a device-attestation provider, and `DummyDim`'s recognition calls (Fellowship or root) to grant
-//! personhood directly.
+//! Optional: `DummyDim`'s recognition calls (Fellowship or root) grant personhood directly.
 
 use super::*;
 
@@ -125,8 +109,11 @@ use frame_support::{
 	parameter_types,
 	traits::{
 		fungible::{HoldConsideration, ItemOf},
-		AsEnsureOriginWithArg, ConstU128, ConstUint, ContainsPair, Get, PalletInfoAccess,
+		tokens::ConversionToAssetBalance,
+		AsEnsureOriginWithArg, ConstBool, ConstU128, ConstUint, ConstantStoragePrice, ContainsPair,
+		Get, PalletInfoAccess,
 	},
+	weights::WeightToFee,
 };
 use indiv_pallet_origin_restriction::Allowance;
 use indiv_support::{
@@ -141,7 +128,7 @@ use scale_info::TypeInfo;
 #[cfg(feature = "runtime-benchmarks")]
 use sp_runtime::MultiSigner;
 use sp_runtime::{
-	traits::{AccountIdConversion, ConstI8, ConstU16, Verify},
+	traits::{AccountIdConversion, ConstI8, ConstU16, Convert, Verify},
 	DispatchError, DispatchResult, MultiSignature,
 };
 use sp_statement_store::StatementAllowance;
@@ -252,10 +239,11 @@ parameter_types! {
 	/// Ring exponent for coinage's paid unload token collections.
 	pub const PaidUnloadTokenRingExponent: RingExponent = RingExponent::R2e10;
 
-	/// How long a person must wait before they may prove membership of the ring they were just
-	/// added to, in seconds. Without the delay, the act of joining would narrow the anonymity set
-	/// down to the newest member.
-	pub const SelfInclusionDelayValue: u64 = 3600;
+	/// How long a person must wait before they may include themselves in the people ring collection,
+	/// in seconds. This bypasses the normal onboarding queue mechanism, potentially reducing privacy.
+	/// Without the delay, the act of joining would narrow the anonymity set down to the newest member
+	/// in certain contexts.
+	pub const SelfInclusionDelayValue: u64 = 300;
 
 	/// Owner of the people collection in `pallet-members`. Set to the pallet's own location so
 	/// that no other origin can manage it.
@@ -297,7 +285,7 @@ impl indiv_pallet_members::Config for Runtime {
 	type MaxCollections = ConstU32<100>;
 	type OnboardingQueuePageSize = ConstU32<255>;
 	type MaxFlexibleRingExponent = MembersFlexibleRingExponent;
-	type RingBuildingMemberLimit = ConstU32<100>;
+	type RingBuildingMemberLimit = ConstU32<60>;
 	/// 10 minutes, so proofs against a superseded root stay valid for a grace period.
 	type OldRootRetentionDuration = ConstU64<600>;
 	type OnRingRootChange = MembersNotifier;
@@ -314,6 +302,14 @@ impl frame_support::traits::Contains<Context> for AccountContexts {
 	fn contains(context: &Context) -> bool {
 		context == &indiv_pallet_score::SCORE_CONTEXT
 			|| context == &indiv_pallet_resources::RESOURCES_CONTEXT
+	}
+}
+
+/// The alias contexts that lite people can authenticate against.
+pub struct LiteAccountContexts;
+impl frame_support::traits::Contains<Context> for LiteAccountContexts {
+	fn contains(context: &Context) -> bool {
+		context == indiv_pallet_people_lite::LITE_PEOPLE_AUTH_CONTEXT
 	}
 }
 
@@ -336,7 +332,7 @@ impl indiv_pallet_people::Config for Runtime {
 }
 
 impl indiv_pallet_people_lite::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_people_lite::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_people_lite::weights::SubstrateWeight<Runtime>;
 	type AttestationAllowanceManager = RootOrFellows;
 	type MemberService = Members;
 	type CollectionOwner = LitePeopleCollectionOwner;
@@ -344,7 +340,7 @@ impl indiv_pallet_people_lite::Config for Runtime {
 	type LiteOnboardingSize = LitePeopleOnboardingSize;
 	type AttestationSignature = Signature;
 	type LiteConsumerRegistrar = Resources;
-	type AccountContexts = AccountContexts;
+	type AccountContexts = LiteAccountContexts;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = ();
 }
@@ -448,11 +444,7 @@ impl pallet_nfts::Config for Runtime {
 parameter_types! {
 	pub const PlayDepositReason: RuntimeHoldReason =
 		RuntimeHoldReason::Game(indiv_pallet_game::HoldReason::PlayDeposit);
-	// TODO: double-check this value for Polkadot. Ported verbatim from the reference runtime, where
-	// it is 2 PAS; here the same literal is 2 DOT, which is a materially higher barrier to playing.
-	// It is only the *default* — `ManagerOrigin` can change it on chain — but the default is what a
-	// freshly upgraded chain runs with.
-	pub const PlayDepositDefault: Balance = 2 * UNITS;
+	pub const PlayDepositDefault: Balance = 5 * UNITS;
 	pub PlayerStatementLimit: StatementAllowance =
 		StatementAllowance { max_size: 1_000_000, max_count: 1_000_000 };
 	pub GameAirdropSource: AccountId = PalletId(*b"pop/gads").into_account_truncating();
@@ -496,6 +488,7 @@ impl indiv_pallet_game::Config for Runtime {
 	type UnixTime = RuntimeClock;
 	type ManagerOrigin = RootOrFellows;
 	type InviteIssuer = RootOrFellows;
+	type EnsureLiteAlias = indiv_pallet_people_lite::EnsureLiteAliasInContext<Runtime>;
 	type NonPlayingKickoutTime = ConstU32<{ 90 * time::DAYS }>;
 	type NativeFungible = Balances;
 	type PlayDeposit = HoldConsideration<
@@ -583,7 +576,7 @@ impl indiv_pallet_airdrop::Config for Runtime {
 	type AccountIdToPublic = AccountIdToSr25519Public;
 	type ClearLimit = ConstU32<100>;
 	type DrawLimit = ConstU32<100>;
-	type OffchainWorkerInterval = ConstU32<1>;
+	type OffchainWorkerInterval = ConstU32<2>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::AirdropBenchmarkHelper;
 }
@@ -610,7 +603,6 @@ parameter_types! {
 impl indiv_pallet_resources::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_resources::WeightInfo<Runtime>;
 	type MemberService = Members;
-	type MaxUsernameLength = MaxUsernameLength;
 	type MinUsernameLength = MinUsernameLength;
 	type PersonAuthDuration = PersonAuthDuration;
 	type AccountsApiAllowance = crate::parameters::AccountsApiAllowance;
@@ -694,23 +686,108 @@ impl indiv_pallet_coinage::ValidateProof for MembershipProof {
 parameter_types! {
 	/// Coinage's pallet id, used to derive the account holding the assets backing all coins.
 	pub const CoinagePalletId: PalletId = PalletId(*b"coinage ");
+	pub const CoinageInstanceCreationHoldReason: RuntimeHoldReason =
+		RuntimeHoldReason::Coinage(indiv_pallet_coinage::HoldReason::InstanceCreationDeposit);
+	pub const CoinageInstanceCreationDepositAmount: Balance = 0;
+	pub CoinageLoadDeposit: (Location, Balance) =
+		(StableAssetLocation::get(), HOLLAR_UNITS / 100);
+}
+
+pub type CoinageInstanceCreationDeposit = HoldConsideration<
+	AccountId,
+	Balances,
+	CoinageInstanceCreationHoldReason,
+	ConstantStoragePrice<CoinageInstanceCreationDepositAmount, Balance>,
+>;
+
+/// Coinage only supports the configured HOLLAR instance. Other assets cannot be converted and
+/// therefore cannot be used to pay an unload fee.
+pub struct CoinageFeeConversion;
+
+impl pallet_asset_conversion::Swap<AccountId> for CoinageFeeConversion {
+	type Balance = Balance;
+	type AssetKind = Location;
+
+	fn max_path_len() -> u32 {
+		0
+	}
+
+	fn swap_exact_tokens_for_tokens(
+		_sender: AccountId,
+		_path: Vec<Self::AssetKind>,
+		_amount_in: Self::Balance,
+		_amount_out_min: Option<Self::Balance>,
+		_send_to: AccountId,
+		_keep_alive: bool,
+	) -> Result<Self::Balance, DispatchError> {
+		Err(DispatchError::Other("coinage only supports HOLLAR"))
+	}
+
+	fn swap_tokens_for_exact_tokens(
+		_sender: AccountId,
+		_path: Vec<Self::AssetKind>,
+		_amount_out: Self::Balance,
+		_amount_in_max: Option<Self::Balance>,
+		_send_to: AccountId,
+		_keep_alive: bool,
+	) -> Result<Self::Balance, DispatchError> {
+		Err(DispatchError::Other("coinage only supports HOLLAR"))
+	}
+}
+
+impl pallet_asset_conversion::QuotePrice for CoinageFeeConversion {
+	type Balance = Balance;
+	type AssetKind = Location;
+
+	fn quote_price_tokens_for_exact_tokens(
+		_asset1: Self::AssetKind,
+		_asset2: Self::AssetKind,
+		_amount: Self::Balance,
+		_include_fee: bool,
+	) -> Option<Self::Balance> {
+		None
+	}
+
+	fn quote_price_exact_tokens_for_tokens(
+		_asset1: Self::AssetKind,
+		_asset2: Self::AssetKind,
+		_amount: Self::Balance,
+		_include_fee: bool,
+	) -> Option<Self::Balance> {
+		None
+	}
+}
+
+/// Converts lifecycle weight to HOLLAR, the only coinage asset this runtime enables.
+pub struct CoinageWeightToFee;
+
+impl Convert<Weight, Balance> for CoinageWeightToFee {
+	fn convert(weight: Weight) -> Balance {
+		AssetRate::to_asset_balance(
+			<crate::DotWeightToFee<Runtime> as WeightToFee>::weight_to_fee(&weight),
+			StableAssetLocation::get(),
+		)
+		.unwrap_or(Balance::MAX)
+	}
 }
 
 impl indiv_pallet_coinage::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_coinage::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_coinage::weights::SubstrateWeight<Runtime>;
 	type PalletId = CoinagePalletId;
 	type UnixTime = RuntimeClock;
 	type MemberService = Members;
-	type CollectionOwner = CoinageCollectionOwner;
 	type RecyclerRingExponent = RecyclerRingExponent;
 	type PaidUnloadTokenRingExponent = PaidUnloadTokenRingExponent;
 
 	type NativeFungible = Balances;
 	type Fungibles = AssetsWithHolder;
-	type UnderlyingAssetIdManager = RootOrFellows;
-	type ConversionToAssetBalance = AssetRate;
+	type AdminOrigin = RootOrFellows;
+	type SponsorOrigin = frame_system::EnsureSigned<AccountId>;
+	type EnablePermissionless = ConstBool<false>;
+	type LoadDeposit = CoinageLoadDeposit;
+	type InstanceCreationDeposit = CoinageInstanceCreationDeposit;
 
-	// Coin values are `2^exponent * UnderlyingAssetUnit`, so with a unit of $0.01 the denominations
+	// Coin values are `2^exponent * asset_unit`, so with a unit of $0.01 the denominations
 	// run from $0.01 (exponent 0) up to $163.84 (exponent 14).
 	//
 	// TODO: double-check the coinage economics for Polkadot. The denomination range, the free
@@ -720,15 +797,6 @@ impl indiv_pallet_coinage::Config for Runtime {
 	type MinimumExponent = ConstI8<0>;
 	type MaximumExponent = ConstI8<14>;
 	type MinimumExponentForOutputUnloadFee = ConstI8<0>;
-	/// The underlying amount backing one coin at exponent 0, i.e. $0.01 worth of
-	/// [`StableAssetLocation`].
-	///
-	/// NOTE: this is a compile-time constant while the backing asset is chosen at runtime through
-	/// `set_underlying_asset_id`. Nominating an asset whose decimals differ from HOLLAR's silently
-	/// rescales every denomination, so root must nominate HOLLAR — or this constant has to change
-	/// in the same runtime upgrade that nominates something else.
-	type UnderlyingAssetUnit = ConstUint<{ HOLLAR_UNITS / 100 }>;
-
 	type MaximumAge = ConstU16<16>;
 	type MaxSplitOutputs = ConstU32<32>;
 	type MaxConsolidation = ConstU32<64>;
@@ -749,8 +817,10 @@ impl indiv_pallet_coinage::Config for Runtime {
 		ConstU128<{ 1000 * (HOLLAR_UNITS / 100) }>;
 	type MaxFreeUnloadTokensPerTimePeriod = ConstU32<1000>;
 
+	type FeeConversion = CoinageFeeConversion;
+	type NativeAssetKind = StableAssetLocation;
 	type FeeDestination = TypedGetToGet<pallet_collator_selection::StakingPotAccountId<Runtime>>;
-	type WeightToFee = TransactionPayment;
+	type WeightToFee = CoinageWeightToFee;
 	type OffchainWorkerInterval = ConstU32<4>;
 	/// Base lock applied to a coin after a failed `AsCoin` dispatch; grows as `2^retries * base`.
 	type CoinFailureLockPeriod = ConstU64<60>;
@@ -783,7 +853,7 @@ parameter_types! {
 }
 
 impl indiv_pallet_members_notifier::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_members_notifier::WeightInfo<Runtime>;
+	type WeightInfo = indiv_pallet_members_notifier::weights::SubstrateWeight<Runtime>;
 	type XcmRouter = xcm_config::XcmRouter;
 	type ChannelInfo = ParachainSystem;
 	type ManageOrigin = RootOrFellows;
@@ -793,7 +863,7 @@ impl indiv_pallet_members_notifier::Config for Runtime {
 	type Clock = RuntimeClock;
 	type MaxSubscribers = ConstU32<10>;
 	type MaxUpdatesPerBatch = ConstU32<10>;
-	type MaxCollectionsPerSubscriber = ConstU32<3>;
+	type MaxCollectionsPerSubscriber = ConstU32<10>;
 	type MaxCollections = ConstU32<100>;
 	type UpdateTriggerBlocks = ConstU32<1>;
 	type UpdateTriggerThreshold = ConstU32<1>;
@@ -1009,7 +1079,7 @@ pub mod benchmark_utils {
 		genesis::ring_verifier_builder_params,
 		traits::{AddOnlyPeopleTrait, AppendOnlyMembers, RingMode, PEOPLE_IDENTIFIER},
 	};
-	use sp_runtime::{traits::IdentifyAccount, FixedU128};
+	use sp_runtime::traits::IdentifyAccount;
 	use verifiable::ring::RingDomainSize;
 
 	type BenchRingSetup = (
@@ -1468,10 +1538,43 @@ pub mod benchmark_utils {
 	pub struct CoinageBenchHelper;
 	impl indiv_pallet_coinage::BenchmarkHelper<Runtime> for CoinageBenchHelper {
 		fn setup_assets() {
+			use frame_support::traits::fungibles::{Inspect, Mutate};
+
 			ensure_stable_asset_exists();
-			if !indiv_pallet_coinage::UnderlyingAssetId::<Runtime>::exists() {
-				indiv_pallet_coinage::UnderlyingAssetId::<Runtime>::put(StableAssetLocation::get());
+			if indiv_pallet_coinage::AssetToInstance::<Runtime>::iter_key_prefix(
+				StableAssetLocation::get(),
+			)
+			.next()
+			.is_none()
+			{
+				let asset = StableAssetLocation::get();
+				<AssetsWithHolder as Mutate<_>>::mint_into(
+					asset.clone(),
+					&Coinage::pallet_account(),
+					<AssetsWithHolder as Inspect<_>>::minimum_balance(asset.clone()),
+				)
+				.expect("benchmark: coinage pallet account must be fundable");
+				Coinage::create_sufficient_instance(
+					RuntimeOrigin::root(),
+					asset,
+					HOLLAR_UNITS / 100,
+				)
+				.expect("benchmark: sufficient coinage instance must be creatable");
 			}
+		}
+
+		fn setup_asset_without_instance() -> Location {
+			use frame_support::traits::fungibles::{Inspect, Mutate};
+
+			ensure_stable_asset_exists();
+			let asset = StableAssetLocation::get();
+			<AssetsWithHolder as Mutate<_>>::mint_into(
+				asset.clone(),
+				&Coinage::pallet_account(),
+				<AssetsWithHolder as Inspect<_>>::minimum_balance(asset.clone()),
+			)
+			.expect("benchmark: coinage pallet account must be fundable");
+			asset
 		}
 
 		fn fund_account(who: &AccountId, amount: Balance) {
@@ -1479,17 +1582,37 @@ pub mod benchmark_utils {
 				.expect("benchmark: account must be fundable");
 		}
 
+		fn create_extra_asset(seed: u32, who: &AccountId) -> Location {
+			use frame_support::traits::fungibles::{Create, Mutate};
+
+			let asset = Self::extra_asset_id(seed);
+			if !Assets::asset_exists(asset.clone()) {
+				<Assets as Create<_>>::create(
+					asset.clone(),
+					CoinagePalletId::get().into_account_truncating(),
+					true,
+					1u128,
+				)
+				.expect("benchmark: extra asset must be creatable");
+			}
+			<AssetsWithHolder as Mutate<_>>::mint_into(asset.clone(), who, 1_000_000 * UNITS)
+				.expect("benchmark: extra asset must be fundable");
+			asset
+		}
+
+		fn extra_asset_id(seed: u32) -> Location {
+			Location::new(
+				1,
+				[Parachain(1000), PalletInstance(50), GeneralIndex(1_000_000u128 + seed as u128)],
+			)
+		}
+
 		fn set_time(now: core::time::Duration) {
 			pallet_timestamp::Now::<Runtime>::put(now.as_millis() as u64);
 		}
 
-		fn setup_conversion_rate() {
-			// DOT has 10 decimals and HOLLAR has 18, so one raw HOLLAR unit ($10^-18) is
-			// 10^-8 raw DOT.
-			pallet_asset_rate::ConversionRateToNative::<Runtime>::insert(
-				StableAssetLocation::get(),
-				FixedU128::from_rational(1, 100_000_000),
-			);
+		fn setup_fee_conversion() {
+			// The benchmark runtime retains the production HOLLAR-only fee conversion policy.
 		}
 
 		fn create_people_proof(context: &[u8], msg: &[u8], _alias: Alias) -> MembershipProof {

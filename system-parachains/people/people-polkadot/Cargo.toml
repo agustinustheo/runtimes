@@ -42,6 +42,7 @@ indiv-pallet-resources = { workspace = true }
 indiv-pallet-score = { workspace = true }
 indiv-support = { workspace = true }
 pallet-assets = { workspace = true }
+pallet-asset-conversion = { workspace = true }
 pallet-asset-rate = { workspace = true }
 pallet-assets-holder = { workspace = true }
 pallet-aura = { workspace = true }
@@ -145,6 +146,7 @@ std = [
 	"indiv-pallet-members-notifier/std",
 	"indiv-pallet-nft-credits/std",
 	"indiv-pallet-members/std",
+	"indiv-pallet-nft-credits/std",
 	"indiv-pallet-origin-restriction/std",
 	"indiv-pallet-people-lite/std",
 	"indiv-pallet-people/std",
@@ -153,6 +155,7 @@ std = [
 	"indiv-pallet-score/std",
 	"indiv-support/std",
 	"log/std",
+	"pallet-asset-conversion/std",
 	"pallet-asset-rate/std",
 	"pallet-asset-tx-payment/std",
 	"pallet-assets-holder/std",
@@ -208,6 +211,7 @@ std = [
 ]
 
 runtime-benchmarks = [
+	"asset-hub-polkadot-runtime/runtime-benchmarks",
 	"assets-common/runtime-benchmarks",
 	"cumulus-pallet-parachain-system/runtime-benchmarks",
 	"cumulus-pallet-session-benchmarking/runtime-benchmarks",
@@ -229,6 +233,7 @@ runtime-benchmarks = [
 	"indiv-pallet-members-notifier/runtime-benchmarks",
 	"indiv-pallet-nft-credits/runtime-benchmarks",
 	"indiv-pallet-members/runtime-benchmarks",
+	"indiv-pallet-nft-credits/runtime-benchmarks",
 	"indiv-pallet-origin-restriction/runtime-benchmarks",
 	"indiv-pallet-people-lite/runtime-benchmarks",
 	"indiv-pallet-people/runtime-benchmarks",
@@ -236,6 +241,7 @@ runtime-benchmarks = [
 	"indiv-pallet-resources/runtime-benchmarks",
 	"indiv-pallet-score/runtime-benchmarks",
 	"indiv-support/runtime-benchmarks",
+	"pallet-asset-conversion/runtime-benchmarks",
 	"pallet-asset-rate/runtime-benchmarks",
 	"pallet-asset-tx-payment/runtime-benchmarks",
 	"pallet-assets-holder/runtime-benchmarks",
@@ -270,6 +276,7 @@ runtime-benchmarks = [
 ]
 
 try-runtime = [
+	"asset-hub-polkadot-runtime/try-runtime",
 	"assets-common/try-runtime",
 	"cumulus-pallet-aura-ext/try-runtime",
 	"cumulus-pallet-parachain-system/try-runtime",
@@ -289,12 +296,14 @@ try-runtime = [
 	"indiv-pallet-members-notifier/try-runtime",
 	"indiv-pallet-nft-credits/try-runtime",
 	"indiv-pallet-members/try-runtime",
+	"indiv-pallet-nft-credits/try-runtime",
 	"indiv-pallet-origin-restriction/try-runtime",
 	"indiv-pallet-people-lite/try-runtime",
 	"indiv-pallet-people/try-runtime",
 	"indiv-pallet-relay-randomness/try-runtime",
 	"indiv-pallet-resources/try-runtime",
 	"indiv-pallet-score/try-runtime",
+	"pallet-asset-conversion/try-runtime",
 	"pallet-asset-rate/try-runtime",
 	"pallet-asset-tx-payment/try-runtime",
 	"pallet-assets-holder/try-runtime",

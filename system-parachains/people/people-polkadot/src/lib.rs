@@ -205,6 +205,8 @@ pub mod migrations {
 	pub type Unreleased = (
 		cumulus_pallet_xcmp_queue::migration::v6::MigrateV5ToV6<Runtime>,
 		cumulus_pallet_parachain_system::migration::Migration<Runtime>,
+		indiv_pallet_people::migration::CreatePeopleCollection<Runtime>,
+		indiv_pallet_people_lite::migration::CreateLitePeopleCollection<Runtime>,
 	);
 
 	/// Migrations/checks that do not need to be versioned and can run on every update.
@@ -785,6 +787,7 @@ construct_runtime!(
 		// 54: previously used for the privacy voucher in the reference runtime.
 		Game: indiv_pallet_game = 55,
 		Score: indiv_pallet_score = 56,
+		// NFT claim credits awarded by the game and delivered to Asset Hub.
 		NftCredits: indiv_pallet_nft_credits = 57,
 		DummyDim: indiv_pallet_dummy_dim = 59,
 		PeopleLite: indiv_pallet_people_lite = 62,
@@ -847,6 +850,7 @@ mod benches {
 		[indiv_pallet_coinage, Coinage]
 		[indiv_pallet_dummy_dim, DummyDim]
 		[indiv_pallet_game, Game]
+		[indiv_pallet_nft_credits, NftCredits]
 		[indiv_pallet_honour, Honour]
 		[indiv_pallet_members, Members]
 		[indiv_pallet_members_notifier, MembersNotifier]

@@ -58,6 +58,16 @@ use core::marker::PhantomData;
 /// Weight functions for `indiv_pallet_game`.
 pub struct WeightInfo<T>(PhantomData<T>);
 impl<T: frame_system::Config> indiv_pallet_game::WeightInfo for WeightInfo<T> {
+	fn sign_up_with_account_lite_invite(n: u32, ) -> Weight {
+		Weight::from_parts(68_160_924, 0)
+			.saturating_add(Weight::from_parts(0, 4113))
+			.saturating_add(Weight::from_parts(653_742_859, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(9))
+			.saturating_add(T::DbWeight::get().reads((2_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().writes(7))
+			.saturating_add(T::DbWeight::get().writes((2_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 3275).saturating_mul(n.into()))
+	}
 	/// Storage: `Game::Game` (r:1 w:1)
 	/// Proof: `Game::Game` (`max_values`: Some(1), `max_size`: Some(74), added: 569, mode: `MaxEncodedLen`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
