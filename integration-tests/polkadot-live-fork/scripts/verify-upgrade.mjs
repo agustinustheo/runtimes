@@ -24,6 +24,28 @@ const candidates = new Map([
 ]);
 const authorizedUpgradeKey =
   "0x26aa394eea5630e07c48ae0c9558cef72fa9f1bf25567808771bff091dc89ecd";
+const observationSeconds = Number(
+  process.env.POST_UPGRADE_OBSERVATION_SECONDS ?? "900",
+);
+const observationIntervalSeconds = Number(
+  process.env.POST_UPGRADE_OBSERVATION_INTERVAL_SECONDS ??
+    String(Math.min(60, observationSeconds)),
+);
+
+if (!Number.isInteger(observationSeconds) || observationSeconds <= 0) {
+  throw new Error(
+    "POST_UPGRADE_OBSERVATION_SECONDS must be a positive integer",
+  );
+}
+if (
+  !Number.isInteger(observationIntervalSeconds) ||
+  observationIntervalSeconds <= 0 ||
+  observationIntervalSeconds > observationSeconds
+) {
+  throw new Error(
+    "POST_UPGRADE_OBSERVATION_INTERVAL_SECONDS must be a positive integer no greater than POST_UPGRADE_OBSERVATION_SECONDS",
+  );
+}
 
 await Promise.all(endpoints.map(([, endpoint]) => waitForRpc(endpoint, 300_000)));
 
@@ -64,11 +86,43 @@ for (const [name, endpoint] of endpoints) {
   const block = hexBlockNumber(await rpc(endpoint, "chain_getHeader"));
   before.set(name, block);
 }
-await new Promise((resolve) => setTimeout(resolve, 24_000));
-for (const [name, endpoint] of endpoints) {
-  const block = hexBlockNumber(await rpc(endpoint, "chain_getHeader"));
-  if (block <= before.get(name)) throw new Error(`${name} stalled at block ${block}`);
-  console.log(`${name}: advanced ${before.get(name)} -> ${block}`);
+
+console.log(
+  `Observing all four chains for ${observationSeconds} seconds after the upgrades...`,
+);
+const startedAt = Date.now();
+const deadline = startedAt + observationSeconds * 1_000;
+let previous = new Map(before);
+while (Date.now() < deadline) {
+  const waitMilliseconds = Math.min(
+    observationIntervalSeconds * 1_000,
+    deadline - Date.now(),
+  );
+  await new Promise((resolve) => setTimeout(resolve, waitMilliseconds));
+
+  const elapsedSeconds = Math.round((Date.now() - startedAt) / 1_000);
+  const current = new Map();
+  for (const [name, endpoint] of endpoints) {
+    const block = hexBlockNumber(await rpc(endpoint, "chain_getHeader"));
+    if (block <= previous.get(name)) {
+      throw new Error(
+        `${name} stalled at block ${block} during the post-upgrade observation`,
+      );
+    }
+    current.set(name, block);
+  }
+  console.log(
+    `post-upgrade +${elapsedSeconds}s: ${endpoints
+      .map(([name]) => `${name} ${previous.get(name)} -> ${current.get(name)}`)
+      .join(", ")}`,
+  );
+  previous = current;
 }
 
-console.log("Only Asset Hub and People upgraded; all four chains continue producing blocks.");
+for (const [name] of endpoints) {
+  console.log(`${name}: advanced ${before.get(name)} -> ${previous.get(name)}`);
+}
+
+console.log(
+  `Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the ${observationSeconds}-second post-upgrade observation.`,
+);

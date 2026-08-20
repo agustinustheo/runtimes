@@ -143,8 +143,10 @@ export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260812"
 
 make verify-fork
 make verify
+make mark-runtime-logs
 make upgrade
 make verify-upgrade
+make inspect-runtime-logs
 make stop
 ```
 
@@ -157,7 +159,11 @@ Some waits in this sequence are intentional:
 - `make upgrade` polls every six seconds while waiting for code enactment, Asset Hub multi-block
   migrations, and the People Chain XCM upgrade. Leave it running while it prints those waiting
   messages; this can take several minutes.
-- `make verify-upgrade` uses another 24-second block-advancement window.
+- `make verify-upgrade` uses a 15-minute post-upgrade observation window and checks every minute
+  that all four chains continue to advance.
+- `make mark-runtime-logs` records the pre-upgrade Asset Hub and People log positions.
+- `make inspect-runtime-logs` prints and preserves the runtime, migration, and Individuality log
+  messages written after those positions for manual review.
 - `make stop` can take up to about 60 seconds to make the foreground `make spawn` process exit
   because Zombie Bite checks its stop file on that interval.
 
@@ -174,7 +180,7 @@ All four original-runtime forks are reachable and producing blocks.
 Asset Hub upgraded to 2003003
 People upgraded to 2003003
 People-to-Asset-Hub initialization XCM completed; Asset Hub subscription is active
-Only Asset Hub and People upgraded; all four chains continue producing blocks.
+Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 `make verify-fork` compares each boundary with the corresponding live RPC. The local block hash and

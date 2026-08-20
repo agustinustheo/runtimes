@@ -3,6 +3,7 @@ set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
 require_file "$ARTIFACTS_DIR/bite/config.toml"
+node "$HARNESS_DIR/scripts/configure-runtime-logs.mjs" "$ARTIFACTS_DIR/bite/config.toml"
 export PATH="$DG_DIR:$PATH"
 export ZOMBIE_BITE_STATE_PRUNING="${ZOMBIE_BITE_STATE_PRUNING:-256}"
 export ZOMBIE_BITE_PARA_1000_STATE_PRUNING="${ZOMBIE_BITE_PARA_1000_STATE_PRUNING:-256}"

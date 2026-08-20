@@ -265,6 +265,19 @@ All four original-runtime forks are reachable and producing blocks.
 
 The command includes a 24-second block-production check.
 
+Before applying either upgrade, record the current end of the Asset Hub and People collator logs:
+
+```sh
+make mark-runtime-logs
+```
+
+Expected result:
+
+```text
+Collator-1000: marked <artifact-directory>/spawn/Collator-1000/Collator-1000.log
+Collator-1004: marked <artifact-directory>/spawn/Collator-1004/Collator-1004.log
+```
+
 ## 10. Upgrade Asset Hub and People
 
 Run in Terminal 2:
@@ -326,11 +339,28 @@ relay: advanced <before> -> <after>
 asset-hub: advanced <before> -> <after>
 people: advanced <before> -> <after>
 bulletin: advanced <before> -> <after>
-Only Asset Hub and People upgraded; all four chains continue producing blocks.
+Observing all four chains for 900 seconds after the upgrades...
+post-upgrade +60s: relay <before> -> <after>, asset-hub <before> -> <after>, people <before> -> <after>, bulletin <before> -> <after>
+... repeated every 60 seconds through 900 seconds ...
+Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
-Do not stop after the four runtime lines. The command waits 24 seconds and then checks block
-production. The final summary line is required.
+Do not stop after the four runtime lines. By default, the command observes all four chains for 900
+seconds, checking every 60 seconds that every chain advanced. The final summary line is required.
+For a local script smoke test only, the duration can be overridden with
+`POST_UPGRADE_OBSERVATION_SECONDS`; a release-validation run must use the 900-second default.
+
+Inspect the Asset Hub and People collator output written since the pre-upgrade checkpoint:
+
+```sh
+make inspect-runtime-logs
+```
+
+The output must contain the runtime-upgrade and migration assessment on both collators. It should
+also show the automatic Individuality hooks, including the People notifier and the Asset Hub
+subscriber/PGAS activity when those hooks execute. Manually review the excerpt and treat panics,
+runtime execution errors, failed migrations, or essential-task failures as test failures. The
+excerpt is saved locally as `<artifact-directory>/runtime-upgrade-logs.txt`.
 
 ## 12. Stop the network
 

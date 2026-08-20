@@ -1,4 +1,4 @@
-.PHONY: build-wasm setup preflight config bite spawn verify-fork verify upgrade verify-upgrade stop
+.PHONY: build-wasm setup preflight config bite spawn verify-fork verify mark-runtime-logs upgrade verify-upgrade inspect-runtime-logs stop
 
 build-wasm:
 	./scripts/build-wasm.sh
@@ -24,11 +24,17 @@ verify-fork:
 verify:
 	@bash -c 'source ./scripts/common.sh && node ./scripts/verify.mjs'
 
+mark-runtime-logs:
+	./scripts/runtime-logs.sh mark
+
 upgrade:
 	./scripts/upgrade.sh
 
 verify-upgrade:
 	@bash -c 'source ./scripts/common.sh && node ./scripts/verify-upgrade.mjs'
+
+inspect-runtime-logs:
+	./scripts/runtime-logs.sh inspect
 
 stop:
 	./scripts/stop.sh

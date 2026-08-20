@@ -104,6 +104,10 @@ This command proves these conditions:
 
 The command observes block production for 24 seconds.
 
+Run `make mark-runtime-logs` after this check. It records the current Asset Hub and People
+collator log positions so the later inspection only includes output written during and after the
+upgrades.
+
 ### 6. Apply the runtime upgrades
 
 Run `make upgrade`.
@@ -144,7 +148,11 @@ It also checks these conditions:
 - Bulletin runtime code did not change
 - all four chains continue to produce blocks
 
-The final block-production check takes 24 seconds.
+The final block-production check observes all four chains for 15 minutes and requires every chain
+to advance during each one-minute interval.
+
+Run `make inspect-runtime-logs` after the observation. Review the post-checkpoint Asset Hub and
+People excerpts for the runtime migration assessment and automatic Individuality hooks.
 
 ### 8. Stop the network
 
@@ -171,8 +179,9 @@ The Zombie Bite timestamps use UTC. The local timezone was UTC+7.
 The gap from `09:57` to `12:42` was a pause before `make spawn`. It was not synchronization time.
 
 The Terminal 2 capture has no timestamps. Therefore, it does not provide an exact duration for
-verification and upgrade. The two block-production checks take 24 seconds each. Upgrade checks
-poll every six seconds and can take several minutes.
+verification and upgrade. The pre-upgrade block-production check takes 24 seconds. The current
+final verification adds a 15-minute observation; the recorded run predates that addition. Upgrade
+checks poll every six seconds and can take several minutes.
 
 The measured synchronization time depends on public peer availability. Asset Hub is the largest
 and slowest capture.

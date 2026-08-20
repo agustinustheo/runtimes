@@ -34,8 +34,10 @@ Do not stop `make spawn`. Run these commands in a different shell:
 ```sh
 make verify-fork
 make verify
+make mark-runtime-logs
 make upgrade
 make verify-upgrade
+make inspect-runtime-logs
 make stop
 ```
 
@@ -63,6 +65,6 @@ The notifier fixture represents the governance subscription that the production 
 - the Revive v4 multi-block migration completed, and the runtime records it as historic; and
 - after the People upgrade, the notifier's authorized maintenance call sends a real XCM that activates `MembersSubscriber` on Asset Hub.
 
-`make verify-upgrade` makes an independent check that proves three facts. The upgrades consumed both authorizations. The Relay chain code and the Bulletin code did not change. All four chains continue to produce blocks.
+`make verify-upgrade` makes an independent check that proves three facts. The upgrades consumed both authorizations. The Relay chain code and the Bulletin code did not change. All four chains continue to produce blocks throughout a 15-minute observation. `make mark-runtime-logs` and `make inspect-runtime-logs` isolate the Asset Hub and People runtime, migration, and Individuality messages written during and after the upgrades for manual review.
 
 This harness gives evidence of live-state upgrades and of targeted cross-chain operation. The harness does not replace the execution of production governance, compatibility tests with external clients, or the later Bulletin receiver upgrade.
