@@ -37,8 +37,9 @@ Run this on macOS ARM64 or Linux x86_64. You need:
 - a current `polkadot-omni-node` binary at
   `preview-net-v1/bin/polkadot-omni-node` in the primary runtimes checkout.
 
-Set `INDIVIDUALITY_DIR` or `PARACHAIN_NODE_BIN` if those paths differ. Allow several gigabytes of
-free disk space. Asset Hub is the largest state capture.
+Set `INDIVIDUALITY_DIR` or `PARACHAIN_NODE_BIN` if those paths differ. Start a cold clean run with
+at least 250 GiB free so the Rust builds, capture databases, compressed snapshots, and spawned
+working copies can coexist. Asset Hub is the largest state capture.
 
 On systems with a low open-file limit, `make bite` raises its own soft limit to 4,096 before it
 opens a captured ParityDB database. If the shell does not permit that increase, the command stops
@@ -93,15 +94,19 @@ each clean run.
 ```sh
 cd /absolute/path/to/runtimes/integration-tests/polkadot-live-fork
 
-export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260812"
+export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260820-01"
 unset ZOMBIE_BITE_REUSE_PARA_ARTIFACTS
 unset ZOMBIE_BITE_REUSE_RELAY_ARTIFACTS
 
 git rev-parse HEAD
-make build-wasm
-make bite
+CARGO_BUILD_JOBS=2 make build-wasm
+CARGO_BUILD_JOBS=2 make bite
 make spawn
 ```
+
+When using an isolated `CARGO_TARGET_DIR`, export
+`WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"` before `make build-wasm` so the WASM
+builder still resolves the current repository workspace.
 
 Leave `make spawn` running. The default local RPC ports are:
 
@@ -139,12 +144,12 @@ Use the exact same artifact directory:
 ```sh
 cd /absolute/path/to/runtimes/integration-tests/polkadot-live-fork
 
-export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260812"
+export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260820-01"
 
 make verify-fork
 make verify
 make mark-runtime-logs
-make upgrade
+CARGO_BUILD_JOBS=2 make upgrade
 make verify-upgrade
 make inspect-runtime-logs
 make stop
@@ -164,7 +169,7 @@ Some waits in this sequence are intentional:
 - `make mark-runtime-logs` records the pre-upgrade Asset Hub and People log positions.
 - `make inspect-runtime-logs` prints and preserves the runtime, migration, and Individuality log
   messages written after those positions for manual review.
-- `make stop` can take up to about 60 seconds to make the foreground `make spawn` process exit
+- `make stop` can take up to about 90 seconds to make the foreground `make spawn` process exit
   because Zombie Bite checks its stop file on that interval.
 
 `make stop` asks the monitor in Terminal 1 to shut down the network. If a verification command
@@ -197,7 +202,7 @@ Normal verification does not need the reuse environment variables. Keep the comp
 directory and run `make spawn` against it again:
 
 ```sh
-export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260812"
+export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260820-01"
 make spawn
 ```
 
@@ -214,14 +219,32 @@ the matching specs, snapshots, head markers, and block markers are already inter
 The nine-hour development goal was not the duration of one test. It included implementation,
 several failed state captures, diagnosis, patch changes, and repeated four-chain runs.
 
-Typical timing depends on cache and peer availability:
+Measured 2026-08-20 timing, which still depends on cache and peer availability:
 
-- existing build and clean captured artifacts: approximately 8–12 minutes for spawn through final
-  verification;
-- fresh state capture: usually tens of minutes, dominated by Asset Hub and Relay synchronization;
-- cold Rust build plus fresh capture: potentially an hour or more.
+- fresh two-candidate build with `CARGO_BUILD_JOBS=2`: 14 minutes 13 seconds;
+- fresh four-chain capture: 2 hours 25 minutes 41 seconds;
+- fresh spawn to the ready message: 44 seconds;
+- snapshot-reuse spawn with the explicit runtime log filters: 50 seconds;
+- ordered Asset Hub and People upgrade: 8 minutes 21 seconds; and
+- final post-upgrade observation: 15 minutes 1 second including command overhead.
 
 A nine-hour clean run is not normal. Treat a capture with no peers or no database growth as stalled.
+
+## Latest validated results
+
+The 2026-08-20 fresh capture recorded Relay `32633720`, Asset Hub `19671181`, People `8761757`,
+and Bulletin `1448558`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and
+`2002001`. The exact Asset Hub and People `2003003` candidate SHA-256 hashes were
+`8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d` and
+`1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c`.
+
+The 900-second rerun advanced Relay `32633827 -> 32633977` (+150), Asset Hub
+`19671477 -> 19671927` (+450), People `8762055 -> 8762505` (+450), and Bulletin
+`1448662 -> 1448812` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
+collators, `PGAS asset created` on Asset Hub, and the People notifier's successful
+`send_init_page` submission. The scoped log scan found no runtime error, panic, failed migration,
+or essential-task failure. After `make stop`, ports `9944`, `9945`, `9910`, `9914`, and `9920`
+were closed and every related process had exited.
 
 ## Troubleshooting
 

@@ -12,7 +12,7 @@ Do not run the Terminal 2 commands until Terminal 1 reports that the network is 
 Go to the test directory:
 
 ```sh
-cd /Users/theo/Projects/parity/runtimes/.worktrees/polkadot-zombie-bite-live-fork/integration-tests/polkadot-live-fork
+cd /absolute/path/to/runtimes/integration-tests/polkadot-live-fork
 ```
 
 Set the open-file limit:
@@ -35,7 +35,7 @@ The value can be greater than 4,096. Do not continue if it is less than 4,096.
 Use a name that does not exist. Change the run identifier for each clean run:
 
 ```sh
-export RUN_ID=manual-20260813-01
+export RUN_ID=manual-20260820-01
 export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-$RUN_ID"
 
 unset ZOMBIE_BITE_REUSE_PARA_ARTIFACTS
@@ -58,6 +58,15 @@ Run:
 
 ```sh
 CARGO_BUILD_JOBS=2 make build-wasm
+```
+
+If you deliberately use an isolated Cargo target, also point the WASM builder back to this
+repository root:
+
+```sh
+CARGO_TARGET_DIR=/absolute/path/to/isolated-target \
+  WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)" \
+  CARGO_BUILD_JOBS=2 make build-wasm
 ```
 
 Expected result:
@@ -120,7 +129,8 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The 2026-08-13 manual run took about 1 hour and 19 minutes for this command.
+The 2026-08-20 fresh capture took 2 hours 25 minutes 41 seconds. Capture time depends on public
+peer availability and can vary substantially.
 
 ## 5. Confirm the capture files
 
@@ -135,10 +145,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 19408331,
-  "para_1004_start_block": 8482738,
-  "para_1010_start_block": 1351019,
-  "rc_start_block": 32534228
+  "para_1000_start_block": 19671181,
+  "para_1004_start_block": 8761757,
+  "para_1010_start_block": 1448558,
+  "rc_start_block": 32633720
 }
 ```
 
@@ -180,7 +190,8 @@ Block #<relay-block-3>
 network is up and running...
 ```
 
-The 2026-08-13 manual run took about 49 seconds from `make spawn` to the ready message.
+The 2026-08-20 fresh run took 44 seconds from `make spawn` to the ready message. The later
+snapshot-reuse rerun with the explicit runtime log filters took 50 seconds.
 
 Leave Terminal 1 open. Continue in Terminal 2.
 
@@ -189,13 +200,13 @@ Leave Terminal 1 open. Continue in Terminal 2.
 Go to the same test directory:
 
 ```sh
-cd /Users/theo/Projects/parity/runtimes/.worktrees/polkadot-zombie-bite-live-fork/integration-tests/polkadot-live-fork
+cd /absolute/path/to/runtimes/integration-tests/polkadot-live-fork
 ```
 
 Set the exact same artifact directory. Use the same run identifier as Terminal 1:
 
 ```sh
-export RUN_ID=manual-20260813-01
+export RUN_ID=manual-20260820-01
 export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-$RUN_ID"
 ```
 
@@ -335,13 +346,13 @@ relay: runtime unchanged at 2003002
 asset-hub: candidate runtime 2003003 active
 people: candidate runtime 2003003 active
 bulletin: runtime unchanged at 2002001
+Observing all four chains for 900 seconds after the upgrades...
+post-upgrade +60s: relay <before> -> <after>, asset-hub <before> -> <after>, people <before> -> <after>, bulletin <before> -> <after>
+... repeated every 60 seconds through 900 seconds ...
 relay: advanced <before> -> <after>
 asset-hub: advanced <before> -> <after>
 people: advanced <before> -> <after>
 bulletin: advanced <before> -> <after>
-Observing all four chains for 900 seconds after the upgrades...
-post-upgrade +60s: relay <before> -> <after>, asset-hub <before> -> <after>, people <before> -> <after>, bulletin <before> -> <after>
-... repeated every 60 seconds through 900 seconds ...
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
@@ -356,11 +367,25 @@ Inspect the Asset Hub and People collator output written since the pre-upgrade c
 make inspect-runtime-logs
 ```
 
-The output must contain the runtime-upgrade and migration assessment on both collators. It should
-also show the automatic Individuality hooks, including the People notifier and the Asset Hub
-subscriber/PGAS activity when those hooks execute. Manually review the excerpt and treat panics,
-runtime execution errors, failed migrations, or essential-task failures as test failures. The
-excerpt is saved locally as `<artifact-directory>/runtime-upgrade-logs.txt`.
+The output must contain the runtime-upgrade and migration assessment on both collators. In the
+2026-08-20 run it included `PGAS asset created` on Asset Hub and `offchain worker: submitted
+send_init_page successfully` on People, together with FRAME migration-assessment lines for the new
+pallets. Manually review the excerpt and treat panics, runtime execution errors, failed migrations,
+or essential-task failures as test failures. The excerpt is saved locally as
+`<artifact-directory>/runtime-upgrade-logs.txt`. A quiet subscriber hook is not itself a failure;
+the independent on-chain subscription-state check remains required.
+
+### Recorded 2026-08-20 final result
+
+The validated 900-second run produced this aggregate advancement:
+
+```text
+relay: advanced 32633827 -> 32633977
+asset-hub: advanced 19671477 -> 19671927
+people: advanced 8762055 -> 8762505
+bulletin: advanced 1448662 -> 1448812
+Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
+```
 
 ## 12. Stop the network
 
@@ -376,14 +401,14 @@ Expected immediate output:
 ./scripts/stop.sh
 ```
 
-Terminal 1 can take approximately 60 seconds to return to the shell.
+Terminal 1 can take up to approximately 90 seconds to return to the shell.
 
 ## 13. Optional shutdown check
 
 Run in Terminal 2 after Terminal 1 exits:
 
 ```sh
-for port in 9944 9910 9914 9920; do
+for port in 9944 9945 9910 9914 9920; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "port $port is still open"
   else
@@ -396,6 +421,7 @@ Expected result:
 
 ```text
 port 9944 is closed
+port 9945 is closed
 port 9910 is closed
 port 9914 is closed
 port 9920 is closed
@@ -411,11 +437,11 @@ Use explicit manifest paths. Do not use `rm` or `git clean` for this procedure.
 ```sh
 cargo clean --manifest-path /Users/theo/Projects/parity/runtimes/Cargo.toml
 
-CARGO_TARGET_DIR=/Users/theo/Projects/parity/runtimes/.worktrees/polkadot-zombie-bite-live-fork/target \
+CARGO_TARGET_DIR=/absolute/path/to/isolated-target \
   cargo clean --manifest-path /Users/theo/Projects/parity/runtimes/Cargo.toml
 
 cargo clean \
-  --manifest-path /Users/theo/Projects/parity/runtimes/.worktrees/polkadot-zombie-bite-live-fork/integration-tests/polkadot-live-fork/upgrade-client/Cargo.toml
+  --manifest-path /absolute/path/to/runtimes/integration-tests/polkadot-live-fork/upgrade-client/Cargo.toml
 
 cargo clean --manifest-path /tmp/polkadot-zombie-bite-tools/zombie-bite/Cargo.toml
 ```

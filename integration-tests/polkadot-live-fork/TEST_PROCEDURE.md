@@ -158,33 +158,28 @@ People excerpts for the runtime migration assessment and automatic Individuality
 
 Run `make stop` after all checks pass.
 
-Terminal 1 can take approximately 60 seconds to exit. Zombie Bite checks its stop file at that
-interval.
+Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
+file and tears down every node.
 
-## Recorded timing from the 2026-08-13 manual run
+## Recorded timing from the 2026-08-20 validated runs
 
-The Zombie Bite timestamps use UTC. The local timezone was UTC+7.
+The local timezone was UTC+7. Fresh capture and the configured 15-minute verification were run
+separately so the latter could reuse only the immutable snapshots produced by the former.
 
-| Phase | Start, UTC | Finish, UTC | Measured duration |
-|---|---:|---:|---:|
-| Warm candidate build | Not timestamped | Not timestamped | `0.81 s` from Cargo |
-| People synchronization | `08:38:37` | `08:39:00` | About `23 s` |
-| Bulletin synchronization | `08:38:37` | `08:39:01` | About `24 s` |
-| Asset Hub synchronization | `08:38:37` | `09:35:18` | About `56 min 41 s` |
-| Asset Hub database settling | `09:35:18` | `09:36:13` | About `55 s` |
-| Relay synchronization | `09:36:25` | `09:57:34` | About `21 min 9 s` |
-| Complete fresh capture | `08:38:37` | `09:57:35` | About `1 h 18 min 58 s` |
-| Local network startup | `12:42:14` | `12:43:03` | About `49 s` |
+| Phase | Measured duration |
+|---|---:|
+| Fresh Asset Hub and People candidate build | `14 min 13 s` |
+| Complete fresh four-chain capture | `2 h 25 min 41 s` |
+| Fresh local network startup | `44 s` |
+| Fork-boundary verification | `14.52 s` |
+| Pre-upgrade verification | `24.24 s` |
+| Ordered Asset Hub then People upgrade | `8 min 21 s` |
+| Snapshot-reuse startup with runtime log filters | `50 s` |
+| Configured post-upgrade verification | `15 min 1 s` |
 
-The gap from `09:57` to `12:42` was a pause before `make spawn`. It was not synchronization time.
-
-The Terminal 2 capture has no timestamps. Therefore, it does not provide an exact duration for
-verification and upgrade. The pre-upgrade block-production check takes 24 seconds. The current
-final verification adds a 15-minute observation; the recorded run predates that addition. Upgrade
-checks poll every six seconds and can take several minutes.
-
-The measured synchronization time depends on public peer availability. Asset Hub is the largest
-and slowest capture.
+The pre-upgrade block-production check remains 24 seconds. The final verification used the full
+900-second default and sampled all four chains every minute. Synchronization time depends on public
+peer availability; Asset Hub was the largest and slowest capture.
 
 ## Recorded boundaries
 
@@ -192,10 +187,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32534228` |
-| Asset Hub | `19408331` |
-| People | `8482738` |
-| Bulletin | `1351019` |
+| Relay | `32633720` |
+| Asset Hub | `19671181` |
+| People | `8761757` |
+| Bulletin | `1448558` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -219,22 +214,44 @@ The supplied terminal output proves these results:
 - Bulletin remained at runtime version `2002001`.
 - Asset Hub and People used the exact candidate runtime bytes.
 - Both runtime authorizations were consumed.
-- All four chains continued to produce blocks after the upgrades.
+- All 15 one-minute samples showed all four chains producing blocks after the upgrades.
+- The post-checkpoint logs showed both migration assessments, Asset Hub's PGAS creation, and the
+  People notifier's automatic `send_init_page` hook.
+- The scoped logs contained no runtime error, panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
 The complete Terminal 2 output included this final result:
 
 ```text
-relay: advanced 32534316 -> 32534320
-asset-hub: advanced 19408564 -> 19408576
-people: advanced 8482977 -> 8482986
-bulletin: advanced 1351104 -> 1351108
-Only Asset Hub and People upgraded; all four chains continue producing blocks.
+relay: advanced 32633827 -> 32633977
+asset-hub: advanced 19671477 -> 19671927
+people: advanced 8762055 -> 8762505
+bulletin: advanced 1448662 -> 1448812
+Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ./scripts/stop.sh
 ```
 
-This output completes the final 24-second block-production check. The local ports were closed when
-the artifacts were inspected after the run. This confirms that the local network stopped.
+This output completes the final 900-second block-production check. Relay RPC ports `9944` and
+`9945` and parachain RPC ports `9910`, `9914`, and `9920` were closed after the monitor exited, and
+every related process had stopped.
+
+The exact candidate SHA-256 hashes activated in this run were:
+
+- Asset Hub: `8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d`
+- People: `1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c`
+
+The four non-empty snapshot artifacts were:
+
+| Chain | Bytes | SHA-256 |
+|---|---:|---|
+| Relay | `336156821` | `f7f4cf9f5e1621589e22b6188927e3c4a1e1408340876781fcce0a8eaa12bc13` |
+| Asset Hub | `2745958341` | `a65051cbd429ca1f194179330e402a297625a246362e0efa0c26bd6d23d8ed72` |
+| People | `4862354` | `f7c84883d31e5ca3f1c1a380668511a9b6da11c8f1adb683d1eaff673d4cf1fa` |
+| Bulletin | `2592014` | `da906f5c76508d86416d624bca9155260e3f4a791d807e30099e893f90670bc6` |
+
+The local evidence is retained under
+`/Users/theo/Projects/parity/runtimes/.worktrees/zombie-bite-manual-20260820-1200/integration-tests/polkadot-live-fork/artifacts-clean-proof-manual-20260820-1200`.
+It is intentionally untracked and was not pushed.
 
 ## Warnings and normal waits
 
@@ -250,8 +267,9 @@ only if the process still has peers or the downloaded byte count continues to in
 
 Keep enough free space for the Rust build, captured snapshots, and spawned working copies.
 
-The retained manual artifact directory used approximately 26 GiB after the run. Temporary capture
-data can use more space while `make bite` is active.
+The retained manual artifact directory used approximately 27 GiB after the run. Start a cold clean
+run with at least 250 GiB free because temporary capture data, build products, and spawned working
+copies can coexist while the test is active. The final filesystem check reported 223 GiB free.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.

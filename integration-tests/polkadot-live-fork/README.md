@@ -24,8 +24,8 @@ Build the two candidate WASMs first. Both candidates must use a `spec_version` t
 
 ```sh
 cd integration-tests/polkadot-live-fork
-make build-wasm
-make bite
+CARGO_BUILD_JOBS=2 make build-wasm
+CARGO_BUILD_JOBS=2 make bite
 make spawn
 ```
 
@@ -35,7 +35,7 @@ Do not stop `make spawn`. Run these commands in a different shell:
 make verify-fork
 make verify
 make mark-runtime-logs
-make upgrade
+CARGO_BUILD_JOBS=2 make upgrade
 make verify-upgrade
 make inspect-runtime-logs
 make stop
@@ -68,3 +68,29 @@ The notifier fixture represents the governance subscription that the production 
 `make verify-upgrade` makes an independent check that proves three facts. The upgrades consumed both authorizations. The Relay chain code and the Bulletin code did not change. All four chains continue to produce blocks throughout a 15-minute observation. `make mark-runtime-logs` and `make inspect-runtime-logs` isolate the Asset Hub and People runtime, migration, and Individuality messages written during and after the upgrades for manual review.
 
 This harness gives evidence of live-state upgrades and of targeted cross-chain operation. The harness does not replace the execution of production governance, compatibility tests with external clients, or the later Bulletin receiver upgrade.
+
+## Latest validated run
+
+The 2026-08-20 clean run built fresh candidates, captured four new non-empty snapshots, and recorded
+these boundaries: Relay `32633720`, Asset Hub `19671181`, People `8761757`, and Bulletin `1448558`.
+The captured versions were `2003002`, `2003002`, `2003002`, and `2002001`, respectively.
+
+The candidate versions and SHA-256 hashes were:
+
+| Candidate | `spec_version` | SHA-256 |
+|---|---:|---|
+| Asset Hub | `2003003` | `8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d` |
+| People | `2003003` | `1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c` |
+
+A later rerun used only those immutable fresh snapshots; it did not resynchronize or recapture any
+chain. Asset Hub upgraded before People, both exact candidate WASMs became active, and all 15
+one-minute samples advanced. Over the full 900 seconds, Relay advanced `32633827 -> 32633977`,
+Asset Hub `19671477 -> 19671927`, People `8762055 -> 8762505`, and Bulletin
+`1448662 -> 1448812`. The post-checkpoint logs showed the FRAME migration assessments, Asset Hub's
+`PGAS asset created`, and People's successful `send_init_page` offchain-worker submission. No
+runtime error, panic, failed migration, or essential-task failure appeared in the scoped logs.
+
+The network then stopped cleanly: Relay RPC ports `9944` and `9945` and parachain RPC ports `9910`,
+`9914`, and `9920` were closed, and every related process exited. Results and snapshots remain local
+and are not tracked by Git. The retained artifact directory used about 27 GiB, with 223 GiB free
+after the final run.
