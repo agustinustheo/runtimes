@@ -61,18 +61,6 @@
 //!   produce, since those origins pay no fee from an account.
 //! * [`indiv_pallet_relay_randomness`] surfaces relay chain randomness, used to seed airdrop draws.
 //!
-//! # Not deployed here
-//!
-//! `indiv-pallet-storage-initialization` is a bootstrapping pallet for fresh development chains
-//! (it funds hard-coded development accounts and seeds a first game), so it has no place on
-//! Polkadot.
-//!
-//! `indiv-pallet-mob-rule`, the juror pallet, is not deployed either. Its cases can only be opened
-//! through its `StatementOracle` implementation, and the only pallet that calls it in the reference
-//! runtime is `indiv-pallet-proof-of-ink`, which is not deployed here — so no case could ever be
-//! created and the whole pallet would be inert. It has to come back together with a pallet that
-//! judges statements.
-//!
 //! # Deployment steps
 //!
 //! Enacting the runtime upgrade activates none of this on its own: the ring-VRF machinery is inert
@@ -106,12 +94,10 @@
 //!    accounts nobody controls, so they can only be funded by transfer.
 //! 8. `Game::schedule_games` (Fellowship or root) — no meetup game exists until one is scheduled,
 //!    so `pallet-game` and `pallet-score` stay dormant without this.
-//! 9. `People::create_people_collection` (Fellowship or root) — create the people collection; this
-//!    is not done by the runtime upgrade and must precede people onboarding.
+//! 9. `PeopleLite::set_attestation_allowance` (Fellowship or root) — admit a device-attestation
+//!    provider.
 //!
-//! Optional, per-provider: `PeopleLite::set_attestation_allowance` (Fellowship or root) to admit
-//! a device-attestation provider, and `DummyDim`'s recognition calls (Fellowship or root) to grant
-//! personhood directly.
+//! Optional: `DummyDim`'s recognition calls (Fellowship or root) grant personhood directly.
 
 use super::*;
 
@@ -253,9 +239,10 @@ parameter_types! {
 	/// Ring exponent for coinage's paid unload token collections.
 	pub const PaidUnloadTokenRingExponent: RingExponent = RingExponent::R2e10;
 
-	/// How long a person must wait before they may prove membership of the ring they were just
-	/// added to, in seconds. Without the delay, the act of joining would narrow the anonymity set
-	/// down to the newest member.
+	/// How long a person must wait before they may include themselves in the people ring collection,
+	/// in seconds. This bypasses the normal onboarding queue mechanism, potentially reducing privacy.
+	/// Without the delay, the act of joining would narrow the anonymity set down to the newest member
+	/// in certain contexts.
 	pub const SelfInclusionDelayValue: u64 = 300;
 
 	/// Owner of the people collection in `pallet-members`. Set to the pallet's own location so
@@ -318,6 +305,14 @@ impl frame_support::traits::Contains<Context> for AccountContexts {
 	}
 }
 
+/// The alias contexts that lite people can authenticate against.
+pub struct LiteAccountContexts;
+impl frame_support::traits::Contains<Context> for LiteAccountContexts {
+	fn contains(context: &Context) -> bool {
+		context == indiv_pallet_people_lite::LITE_PEOPLE_AUTH_CONTEXT
+	}
+}
+
 parameter_types! {
 	pub const StaleAliasCleanupInterval: BlockNumber = 5 * time::MINUTES;
 }
@@ -345,7 +340,7 @@ impl indiv_pallet_people_lite::Config for Runtime {
 	type LiteOnboardingSize = LitePeopleOnboardingSize;
 	type AttestationSignature = Signature;
 	type LiteConsumerRegistrar = Resources;
-	type AccountContexts = AccountContexts;
+	type AccountContexts = LiteAccountContexts;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = ();
 }
