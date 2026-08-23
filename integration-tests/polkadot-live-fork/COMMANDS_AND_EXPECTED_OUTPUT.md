@@ -368,9 +368,10 @@ make inspect-runtime-logs
 ```
 
 The output must contain the runtime-upgrade and migration assessment on both collators. In the
-2026-08-23 run it included `PGAS asset created` on Asset Hub and `lite people collection created`
-on People, together with FRAME migration-assessment lines for the new pallets. The independent
-state check also proved that the People initialization XCM activated the Asset Hub subscription.
+latest 2026-08-23 run it included `PGAS asset created` on Asset Hub, `lite people collection
+created` on People, and a successful notifier `send_init_page` submission, together with FRAME
+migration-assessment lines for the new pallets. The independent state check also proved that the
+People initialization XCM activated the Asset Hub subscription.
 Manually review the excerpt and treat panics, upgrade execution errors, failed migrations, or
 essential-task failures as test failures. The excerpt is saved locally as
 `<artifact-directory>/runtime-upgrade-logs.txt`. A quiet subscriber hook is not itself a failure;
@@ -383,25 +384,28 @@ block-production checks passed; do not confuse it with a failed runtime migratio
 
 ### Recorded 2026-08-23 final result
 
-The validated 900-second run produced this aggregate advancement:
+The first +900-second sample exposed a deadline-loop bug that caused one unintended near-zero
+follow-up sample. The loop was fixed, a 20-second regression passed, and the required 900-second
+command was rerun from the upgraded network. The successful rerun produced this aggregate
+advancement:
 
 ```text
-relay: advanced 32634013 -> 32634163
-asset-hub: advanced 19672032 -> 19672482
-people: advanced 8762610 -> 8763060
-bulletin: advanced 1448847 -> 1448997
+relay: advanced 32633994 -> 32634144
+asset-hub: advanced 19671975 -> 19672425
+people: advanced 8762554 -> 8763004
+bulletin: advanced 1448829 -> 1448979
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`ad6bd8be374b649df4f814b5a80df85da498e88096427431416ab2c5c9a7f9ed` and People
-`3d8ff55e919f6b9fcaceed6e27b3cb64cd3f803deae1b95b9ebd0f7761f1c8a5`.
+`802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee` and People
+`7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e`.
 
 The retained final snapshot hashes were Relay
-`68f12831e82e79a317edabf8a1b3f431e6b74ec8048b5c191b21d132d98bf5c7`, Asset Hub
-`e30041c591da2a7d7e904fde542faaea4ad9a8fa17ddba8257ba09e83f5295d1`, People
-`f5cf2b83922a670e0318ff13d6273fcac28cf3093e952eeba225d53190ec40ac`, and Bulletin
-`e84cc7285aeabe70c744fc5e5d3ed5d09e4c00f0ef5c372c431cdc7ca10051e3`.
+`a7092327c4afff3a789bdf77c6435c13d905d6d112c80b8f6b50f1a1358123ee`, Asset Hub
+`e8e4401cfbbc25150a1c1a7b6da6315b026027901f5ba648968810cc50499132`, People
+`579e518ae5441b49abb4355e356359a43f8f2b6a86cb19e309ab4d225baa0bdb`, and Bulletin
+`cc2bb453cfd07196e452356b7d647aff90548bc9eaffce89dae61bb789cc2f91`.
 
 ## 12. Stop the network
 

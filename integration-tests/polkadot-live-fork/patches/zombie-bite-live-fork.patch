@@ -211,7 +211,7 @@ index 6a728cf..43e701e 100644
          String::from(match self {
              Relaychain::Polkadot { .. } => "wss://rpc.polkadot.io",
              Relaychain::Kusama { .. } => "wss://kusama-rpc.polkadot.io",
-@@ -280,12 +309,7 @@ impl Relaychain {
+@@ -280,12 +309,14 @@ impl Relaychain {
      }
  
      pub fn rpc_endpoint(&self) -> String {
@@ -221,11 +221,18 @@ index 6a728cf..43e701e 100644
 -            Relaychain::Paseo { .. } => "wss://paseo-rpc.dwellir.com",
 -            Relaychain::Westend { .. } => "wss://westend-rpc.n.dwellir.com",
 -        })
-+        self.sync_endpoint()
++        let endpoint = self.sync_endpoint();
++        if let Some(rest) = endpoint.strip_prefix("wss://") {
++            format!("https://{rest}")
++        } else if let Some(rest) = endpoint.strip_prefix("ws://") {
++            format!("http://{rest}")
++        } else {
++            endpoint
++        }
      }
  
      pub fn context(&self) -> Context {
-@@ -625,8 +649,11 @@ pub fn generate_network_config(
+@@ -625,8 +656,11 @@ pub fn generate_network_config(
                      ("-l", "aura=debug,runtime=trace,cumulus-consensus=trace,consensus::common=trace,parachain::collation-generation=trace,parachain::collator-protocol=trace,parachain=debug,basic-authorship=trace").into(),
                      "--force-authoring".into()
                  ]);
@@ -239,7 +246,7 @@ index 6a728cf..43e701e 100644
                      col_builder.with_rpc_port(rpc_port)
                  } else {
                      col_builder
-@@ -768,6 +795,13 @@ mod test {
+@@ -768,6 +802,13 @@ mod test {
          assert_eq!(0, config.parachains().len());
      }
  
@@ -253,7 +260,7 @@ index 6a728cf..43e701e 100644
      #[test]
      fn config_with_para_ok() {
          let config = generate_network_config(
-@@ -1069,6 +1103,16 @@ mod test {
+@@ -1069,6 +1110,16 @@ mod test {
          }
      }
  
@@ -264,7 +271,7 @@ index 6a728cf..43e701e 100644
 +            Relaychain::new_with_values("polkadot", None, Some(endpoint.to_string()), None);
 +
 +        assert_eq!(relaychain.sync_endpoint(), endpoint);
-+        assert_eq!(relaychain.rpc_endpoint(), endpoint);
++        assert_eq!(relaychain.rpc_endpoint(), "https://polkadot-rpc.publicnode.com");
 +    }
 +
      #[test]
@@ -301,6 +308,15 @@ index 77a3130..6ead93a 100644
  };
  use crate::overrides::{generate_default_overrides_for_para, generate_default_overrides_for_rc};
  use crate::sync::{sync_para, sync_relay_only};
+@@ -101,7 +103,7 @@ pub async fn doppelganger_inner(
+                 .expect("'rpc_endpoint' for parachain should be set when use 'bite_at' to get the target header. qed");
+             let header = get_header_from_block(at_block, para_rpc).await?;
+ 
+-            let target_header_path = format!("{base_dir_str}/para-header.json");
++            let target_header_path = format!("{base_dir_str}/para-{}-header.json", para.id());
+             fs::write(&target_header_path, serde_json::to_string_pretty(&header)?)
+                 .await
+                 .expect("create target head json should works");
 @@ -110,6 +112,45 @@ pub async fn doppelganger_inner(
              None
          };
@@ -643,12 +659,17 @@ index 77a3130..6ead93a 100644
                  ("--database", database).into(),
              ];
  
-@@ -745,11 +846,10 @@ async fn generate_config(
+@@ -745,11 +846,15 @@ async fn generate_config(
                  }
              }
  
 -            if para.chain.contains("asset-hub") {
-+            if para.chain.contains("asset-hub") || para.chain.contains("people") {
++            // Custom retained-fork specs are named by para id (for example
++            // `1000-polkadot`), so chain-name matching alone misses them.
++            if matches!(para_id, 1000 | 1004)
++                || para.chain.contains("asset-hub")
++                || para.chain.contains("people")
++            {
                  para_default_args.push("--authoring=slot-based".into());
              }
  
@@ -656,7 +677,7 @@ index 77a3130..6ead93a 100644
              let collator_name = format!("Collator-{}", para_id);
  
              config = config.with_parachain(|p| {
-@@ -847,6 +947,93 @@ async fn generate_snap(data_path: &str, snap_path: &str) -> Result<(), anyhow::E
+@@ -847,6 +952,93 @@ async fn generate_snap(data_path: &str, snap_path: &str) -> Result<(), anyhow::E
      Ok(())
  }
  
@@ -750,7 +771,7 @@ index 77a3130..6ead93a 100644
  async fn generate_chain_spec(
      ns: DynNamespace,
      chain_spec_path: &str,
-@@ -934,6 +1121,16 @@ fn get_epoch_ms() -> u128 {
+@@ -934,6 +1126,16 @@ fn get_epoch_ms() -> u128 {
  mod test {
      use super::*;
  
@@ -1040,7 +1061,34 @@ index 3b45351..36e88ae 100644
  }
  
  pub async fn generate_default_overrides_for_rc(
-@@ -321,7 +485,7 @@ pub async fn generate_default_overrides_for_para(
+@@ -305,23 +469,29 @@ pub async fn generate_default_overrides_for_rc(
+     file_path
+ }
+ 
++fn collator_key_type(relay: &Relaychain, para: &Parachain) -> &'static str {
++    match relay {
++        // Asset Hub Polkadot uses Ed25519 Aura keys. Retained-fork configurations
++        // describe it as a custom para, so the para id is the stable discriminator.
++        Relaychain::Polkadot { .. } if para.id() == 1000 => "ed",
++        _ => "sr",
++    }
++}
++
+ pub async fn generate_default_overrides_for_para(
+     base_dir: &str,
+     para: &Parachain,
+     relay: &Relaychain,
+ ) -> PathBuf {
+-    // For AH determine key type based on relay chain: ed25519 for Polkadot, sr25519 for others
+-    let key_type = match (relay, para) {
+-        (Relaychain::Polkadot { .. }, Parachain::AssetHub { .. }) => "ed",
+-        _ => "sr",
+-    };
++    // For AH determine key type based on relay chain: ed25519 for Polkadot, sr25519 for others.
++    let key_type = collator_key_type(relay, para);
+ 
+     // Generate collator key using "Collator-{para_id}" as seed
+     let seed = format!("Collator-{}", para.id());
      let key_to_use = generate_collator_key_from_seed(&seed, key_type);
  
      // Generate the injects using the helper function
@@ -1049,7 +1097,7 @@ index 3b45351..36e88ae 100644
  
      // <Pallet> <Item>
      // e.g Validator Validators
-@@ -351,6 +515,23 @@ pub async fn generate_default_overrides_for_para(
+@@ -351,6 +521,23 @@ pub async fn generate_default_overrides_for_para(
          overrides["3a636f6465"] = Value::String(hex::encode(wasm_content));
      }
  
@@ -1073,7 +1121,30 @@ index 3b45351..36e88ae 100644
      let full_content = json!({
          "overrides": overrides,
          "injects": injects
-@@ -555,6 +736,54 @@ mod test {
+@@ -380,6 +567,22 @@ mod test {
+ 
+     use super::*;
+ 
++    #[test]
++    fn custom_asset_hub_polkadot_uses_ed25519_collator_key() {
++        let para = Parachain::Custom {
++            id: 1000,
++            name: "asset-hub-retained-fork".to_string(),
++            chain_spec: "/tmp/1000-polkadot.json".to_string(),
++            maybe_override: None,
++            maybe_bite_at: None,
++            maybe_rpc_endpoint: Some("http://127.0.0.1:9910".to_string()),
++            cores: 3,
++        };
++
++        assert_eq!(collator_key_type(&Relaychain::new("polkadot"), &para), "ed");
++        assert_eq!(collator_key_type(&Relaychain::new("kusama"), &para), "sr");
++    }
++
+     #[test]
+     fn genesis_slot_encode_u64() {
+         let prefix = array_bytes::bytes2hex(
+@@ -555,6 +758,54 @@ mod test {
          println!("true: {}", array_bytes::bytes2hex("", t));
          println!("false: {}", array_bytes::bytes2hex("", f));
      }

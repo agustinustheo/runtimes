@@ -205,9 +205,18 @@ export ZOMBIE_BITE_ARTIFACTS_DIR="$PWD/artifacts-clean-proof-20260820-01"
 make spawn
 ```
 
-Then repeat the verification commands from Terminal 2. A capture that has already been upgraded is
-safe to reuse because each `make spawn` creates a new working copy from the captured snapshots; the
-captured snapshots themselves are not changed by `make upgrade`.
+Then repeat the verification commands from Terminal 2. Each `make spawn` creates a new working copy,
+so the captured snapshots themselves are not changed by `make upgrade`. The authorization embedded
+in a snapshot is candidate-specific, however. Direct reuse is valid only when the candidate WASM
+hashes are unchanged. For a new candidate, restore the retained snapshots to local source nodes and
+materialize a new artifact with the new candidate authorizations. Do not contact production peers
+or claim that a stale authorization tests the new candidate.
+
+The local rematerialization helper `scripts/local-doppelganger-wrapper.sh` replaces the relay sync
+process's built-in `polkadot` chain argument with a retained local relay spec. Set
+`ZOMBIE_BITE_REAL_DOPPELGANGER` and `ZOMBIE_BITE_LOCAL_RELAY_SPEC`, or place the corresponding
+sidecar path files beside the wrapper. This helper is only for a retained-state localhost source;
+it does not enable artifact reuse and must not point at a newer production state.
 
 `ZOMBIE_BITE_REUSE_PARA_ARTIFACTS` and `ZOMBIE_BITE_REUSE_RELAY_ARTIFACTS` are recovery controls for
 interrupted capture development. Do not use them for an independent clean proof. They assume that
@@ -215,49 +224,57 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The 2026-08-23 validation reused the retained capture and did not contact production peers for a
-new state sync. Its measured timings were:
+The latest 2026-08-23 validation restored the retained capture locally and did not contact
+production peers for a new state sync. Its measured timings were:
 
-- local snapshot restoration to `network is up and running`: 42 seconds;
-- successful fork-boundary verification: 1 minute 20 seconds, including public-RPC latency;
-- pre-upgrade verification: 25 seconds;
+- candidate build: 14 minutes 4 seconds;
+- local rematerialization with fresh authorizations: 8 minutes 30 seconds;
+- final spawn to `network is up and running`: 46 seconds;
+- successful fork-boundary verification: 15 seconds;
+- pre-upgrade verification: 24 seconds;
 - runtime-log checkpoint: less than 1 second;
-- ordered Asset Hub then People upgrade: 7 minutes 26 seconds;
+- ordered Asset Hub then People upgrade: 8 minutes 20 seconds, including the one-time client build;
 - configured post-upgrade verification: exactly 15 minutes plus sub-second command overhead;
 - runtime-log extraction: 1 second; and
-- stop request to foreground-spawner exit: 22 seconds.
+- stop request to foreground-spawner exit: 1 minute 8 seconds, including stopped-state snapshots.
 
-The fresh candidate outputs completed at 10:28 and 10:38 UTC+7 with `CARGO_BUILD_JOBS=2`; the
-original build start timestamp was not retained. A fresh four-chain capture was intentionally
-skipped. Capture time still depends on public peer availability; treat a capture with no peers or
-no database growth as stalled.
+The candidates were built with `CARGO_BUILD_JOBS=2` and
+`WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. A fresh production capture was
+intentionally skipped. The local rematerialization explicitly unset every artifact-reuse variable
+and used only localhost peers backed by the retained snapshots.
 
 ## Latest validated results
 
 The retained capture recorded Relay `32633720`, Asset Hub `19671181`, People `8761757`, and
 Bulletin `1448558`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and
 `2002001`. The 2026-08-23 rerun did not resynchronize those chains. The exact Asset Hub and People
-`2003004` candidate SHA-256 hashes were
-`ad6bd8be374b649df4f814b5a80df85da498e88096427431416ab2c5c9a7f9ed` and
-`3d8ff55e919f6b9fcaceed6e27b3cb64cd3f803deae1b95b9ebd0f7761f1c8a5`.
+`2003003` candidate SHA-256 hashes were
+`802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee` and
+`7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e`.
 
-The final 900-second verification advanced Relay `32634013 -> 32634163` (+150), Asset Hub
-`19672032 -> 19672482` (+450), People `8762610 -> 8763060` (+450), and Bulletin
-`1448847 -> 1448997` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
-collators, `PGAS asset created` on Asset Hub, and `lite people collection created` on People. The
+The final 900-second verification advanced Relay `32633994 -> 32634144` (+150), Asset Hub
+`19671975 -> 19672425` (+450), People `8762554 -> 8763004` (+450), and Bulletin
+`1448829 -> 1448979` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
+collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People, and the
+notifier offchain worker submitting `send_init_page`. The
 omni-node emitted recurring `AuthorityDiscoveryApi_authorities` compatibility messages both before
 and after the upgrades, but there was no panic, failed migration, or essential-task failure.
 
-The final snapshot SHA-256 hashes were Relay
-`68f12831e82e79a317edabf8a1b3f431e6b74ec8048b5c191b21d132d98bf5c7`, Asset Hub
-`e30041c591da2a7d7e904fde542faaea4ad9a8fa17ddba8257ba09e83f5295d1`, People
-`f5cf2b83922a670e0318ff13d6273fcac28cf3093e952eeba225d53190ec40ac`, and Bulletin
-`e84cc7285aeabe70c744fc5e5d3ed5d09e4c00f0ef5c372c431cdc7ca10051e3`.
+The first +900-second sample exposed an extra near-zero deadline sample in the verifier. The loop
+was corrected, a 20-second regression passed, and the complete 900-second verifier was rerun to the
+success summary above.
 
-After `make stop`, ports `61591` through `61595` had no listeners and every related process had
+The final snapshot SHA-256 hashes were Relay
+`a7092327c4afff3a789bdf77c6435c13d905d6d112c80b8f6b50f1a1358123ee`, Asset Hub
+`e8e4401cfbbc25150a1c1a7b6da6315b026027901f5ba648968810cc50499132`, People
+`579e518ae5441b49abb4355e356359a43f8f2b6a86cb19e309ab4d225baa0bdb`, and Bulletin
+`cc2bb453cfd07196e452356b7d647aff90548bc9eaffce89dae61bb789cc2f91`.
+
+After `make stop`, ports `61964` through `61968` and every dynamically allocated node port had no
+listeners, and every related process had
 exited. The retained local artifact directory is
-`integration-tests/polkadot-live-fork/artifacts-rerun-20260822-1408`; it used 3.0 GiB after cleanup,
-with 251 GiB free.
+`integration-tests/polkadot-live-fork/artifacts-pr2-aff953-ed25519-refresh-20260823-1330`; it used
+3.4 GiB after cleanup, with 92 GiB free.
 
 ## Troubleshooting
 

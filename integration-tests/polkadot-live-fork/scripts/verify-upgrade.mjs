@@ -93,12 +93,16 @@ console.log(
 const startedAt = Date.now();
 const deadline = startedAt + observationSeconds * 1_000;
 let previous = new Map(before);
-while (Date.now() < deadline) {
-  const waitMilliseconds = Math.min(
-    observationIntervalSeconds * 1_000,
-    deadline - Date.now(),
+while (true) {
+  const checkpoint = Math.min(
+    Date.now() + observationIntervalSeconds * 1_000,
+    deadline,
   );
-  await new Promise((resolve) => setTimeout(resolve, waitMilliseconds));
+  while (Date.now() < checkpoint) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, checkpoint - Date.now()),
+    );
+  }
 
   const elapsedSeconds = Math.round((Date.now() - startedAt) / 1_000);
   const current = new Map();
@@ -117,6 +121,7 @@ while (Date.now() < deadline) {
       .join(", ")}`,
   );
   previous = current;
+  if (checkpoint === deadline) break;
 }
 
 for (const [name] of endpoints) {
