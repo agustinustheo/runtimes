@@ -205,13 +205,12 @@ pub mod migrations {
 	pub type Unreleased = (
 		cumulus_pallet_xcmp_queue::migration::v6::MigrateV5ToV6<Runtime>,
 		cumulus_pallet_parachain_system::migration::Migration<Runtime>,
+		indiv_pallet_people::migration::CreatePeopleCollection<Runtime>,
+		indiv_pallet_people_lite::migration::CreateLitePeopleCollection<Runtime>,
 	);
 
-	/// Migrations/checks that do not need to be versioned and can run on every update.
-	pub type Permanent = pallet_xcm::migration::MigrateToLatestXcmVersion<Runtime>;
-
 	/// All migrations that will run on the next runtime upgrade.
-	pub type SingleBlockMigrations = (Unreleased, Permanent);
+	pub type SingleBlockMigrations = Unreleased;
 
 	/// MBM migrations to apply on runtime upgrade.
 	pub type MbmMigrations = ();
@@ -798,6 +797,7 @@ construct_runtime!(
 		Honour: indiv_pallet_honour = 71,
 		Nfts: pallet_nfts = 72,
 		Parameters: pallet_parameters = 73,
+		PeopleAirdrops: indiv_pallet_people_airdrops = 74,
 	}
 );
 
@@ -854,6 +854,7 @@ mod benches {
 		[indiv_pallet_members_notifier, MembersNotifier]
 		[indiv_pallet_origin_restriction, OriginRestriction]
 		[indiv_pallet_people, People]
+		[indiv_pallet_people_airdrops, PeopleAirdrops]
 		[indiv_pallet_people_lite, PeopleLite]
 		[indiv_pallet_relay_randomness, RelayRandomness]
 		[indiv_pallet_resources, Resources]
