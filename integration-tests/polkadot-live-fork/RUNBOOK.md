@@ -33,11 +33,10 @@ Run this on macOS ARM64 or Linux x86_64. You need:
 - Git, Rust/Cargo, Node.js, `make`, `curl`, `jq`, and `shasum`;
 - network access to the four RPC endpoints and Polkadot peers;
 - the runtimes checkout containing this harness;
-- the Individuality checkout, normally at `../individuality`; and
 - a current `polkadot-omni-node` binary at
   `preview-net-v1/bin/polkadot-omni-node` in the primary runtimes checkout.
 
-Set `INDIVIDUALITY_DIR` or `PARACHAIN_NODE_BIN` if those paths differ. Start a cold clean run with
+Set `PARACHAIN_NODE_BIN` if that path differs. Start a cold clean run with
 at least 250 GiB free so the Rust builds, capture databases, compressed snapshots, and spawned
 working copies can coexist. Asset Hub is the largest state capture.
 
@@ -216,35 +215,49 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The nine-hour development goal was not the duration of one test. It included implementation,
-several failed state captures, diagnosis, patch changes, and repeated four-chain runs.
+The 2026-08-23 validation reused the retained capture and did not contact production peers for a
+new state sync. Its measured timings were:
 
-Measured 2026-08-20 timing, which still depends on cache and peer availability:
+- local snapshot restoration to `network is up and running`: 42 seconds;
+- successful fork-boundary verification: 1 minute 20 seconds, including public-RPC latency;
+- pre-upgrade verification: 25 seconds;
+- runtime-log checkpoint: less than 1 second;
+- ordered Asset Hub then People upgrade: 7 minutes 26 seconds;
+- configured post-upgrade verification: exactly 15 minutes plus sub-second command overhead;
+- runtime-log extraction: 1 second; and
+- stop request to foreground-spawner exit: 22 seconds.
 
-- fresh two-candidate build with `CARGO_BUILD_JOBS=2`: 14 minutes 13 seconds;
-- fresh four-chain capture: 2 hours 25 minutes 41 seconds;
-- fresh spawn to the ready message: 44 seconds;
-- snapshot-reuse spawn with the explicit runtime log filters: 50 seconds;
-- ordered Asset Hub and People upgrade: 8 minutes 21 seconds; and
-- final post-upgrade observation: 15 minutes 1 second including command overhead.
-
-A nine-hour clean run is not normal. Treat a capture with no peers or no database growth as stalled.
+The fresh candidate outputs completed at 10:28 and 10:38 UTC+7 with `CARGO_BUILD_JOBS=2`; the
+original build start timestamp was not retained. A fresh four-chain capture was intentionally
+skipped. Capture time still depends on public peer availability; treat a capture with no peers or
+no database growth as stalled.
 
 ## Latest validated results
 
-The 2026-08-20 fresh capture recorded Relay `32633720`, Asset Hub `19671181`, People `8761757`,
-and Bulletin `1448558`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and
-`2002001`. The exact Asset Hub and People `2003003` candidate SHA-256 hashes were
-`8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d` and
-`1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c`.
+The retained capture recorded Relay `32633720`, Asset Hub `19671181`, People `8761757`, and
+Bulletin `1448558`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and
+`2002001`. The 2026-08-23 rerun did not resynchronize those chains. The exact Asset Hub and People
+`2003004` candidate SHA-256 hashes were
+`ad6bd8be374b649df4f814b5a80df85da498e88096427431416ab2c5c9a7f9ed` and
+`3d8ff55e919f6b9fcaceed6e27b3cb64cd3f803deae1b95b9ebd0f7761f1c8a5`.
 
-The 900-second rerun advanced Relay `32633827 -> 32633977` (+150), Asset Hub
-`19671477 -> 19671927` (+450), People `8762055 -> 8762505` (+450), and Bulletin
-`1448662 -> 1448812` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
-collators, `PGAS asset created` on Asset Hub, and the People notifier's successful
-`send_init_page` submission. The scoped log scan found no runtime error, panic, failed migration,
-or essential-task failure. After `make stop`, ports `9944`, `9945`, `9910`, `9914`, and `9920`
-were closed and every related process had exited.
+The final 900-second verification advanced Relay `32634013 -> 32634163` (+150), Asset Hub
+`19672032 -> 19672482` (+450), People `8762610 -> 8763060` (+450), and Bulletin
+`1448847 -> 1448997` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
+collators, `PGAS asset created` on Asset Hub, and `lite people collection created` on People. The
+omni-node emitted recurring `AuthorityDiscoveryApi_authorities` compatibility messages both before
+and after the upgrades, but there was no panic, failed migration, or essential-task failure.
+
+The final snapshot SHA-256 hashes were Relay
+`68f12831e82e79a317edabf8a1b3f431e6b74ec8048b5c191b21d132d98bf5c7`, Asset Hub
+`e30041c591da2a7d7e904fde542faaea4ad9a8fa17ddba8257ba09e83f5295d1`, People
+`f5cf2b83922a670e0318ff13d6273fcac28cf3093e952eeba225d53190ec40ac`, and Bulletin
+`e84cc7285aeabe70c744fc5e5d3ed5d09e4c00f0ef5c372c431cdc7ca10051e3`.
+
+After `make stop`, ports `61591` through `61595` had no listeners and every related process had
+exited. The retained local artifact directory is
+`integration-tests/polkadot-live-fork/artifacts-rerun-20260822-1408`; it used 3.0 GiB after cleanup,
+with 251 GiB free.
 
 ## Troubleshooting
 
@@ -288,15 +301,6 @@ or reuse a relay database produced by an older patch.
 The production chain moved beyond the values pinned in `versions.env`. Review the live upgrade and
 the candidate version before changing the pins. The candidate must have a higher version than the
 captured runtime.
-
-### Missing Individuality checkout
-
-Point the build script at it explicitly:
-
-```sh
-export INDIVIDUALITY_DIR=/absolute/path/to/individuality
-make build-wasm
-```
 
 ### Missing parachain node
 

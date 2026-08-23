@@ -71,26 +71,34 @@ This harness gives evidence of live-state upgrades and of targeted cross-chain o
 
 ## Latest validated run
 
-The 2026-08-20 clean run built fresh candidates, captured four new non-empty snapshots, and recorded
-these boundaries: Relay `32633720`, Asset Hub `19671181`, People `8761757`, and Bulletin `1448558`.
-The captured versions were `2003002`, `2003002`, `2003002`, and `2002001`, respectively.
+The 2026-08-23 validation built fresh candidates from PR #2 commit `cb2ecf94f`, then reused the
+already captured snapshots at the user's request; it did not resynchronize or recapture a chain.
+The retained boundaries were Relay `32633720`, Asset Hub `19671181`, People `8761757`, and Bulletin
+`1448558`. Their captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 
-The candidate versions and SHA-256 hashes were:
+The exact candidates activated in the run were:
 
 | Candidate | `spec_version` | SHA-256 |
 |---|---:|---|
-| Asset Hub | `2003003` | `8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d` |
-| People | `2003003` | `1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c` |
+| Asset Hub | `2003004` | `ad6bd8be374b649df4f814b5a80df85da498e88096427431416ab2c5c9a7f9ed` |
+| People | `2003004` | `3d8ff55e919f6b9fcaceed6e27b3cb64cd3f803deae1b95b9ebd0f7761f1c8a5` |
 
-A later rerun used only those immutable fresh snapshots; it did not resynchronize or recapture any
-chain. Asset Hub upgraded before People, both exact candidate WASMs became active, and all 15
-one-minute samples advanced. Over the full 900 seconds, Relay advanced `32633827 -> 32633977`,
-Asset Hub `19671477 -> 19671927`, People `8762055 -> 8762505`, and Bulletin
-`1448662 -> 1448812`. The post-checkpoint logs showed the FRAME migration assessments, Asset Hub's
-`PGAS asset created`, and People's successful `send_init_page` offchain-worker submission. No
-runtime error, panic, failed migration, or essential-task failure appeared in the scoped logs.
+Asset Hub upgraded before People. Its PGAS, `NextAssetId`, and Revive migration checks passed before
+the People upgrade was submitted. People then exposed the Individuality pallets, sent the pending
+initialization XCM, and activated the Asset Hub subscription. The independent verifier confirmed
+the exact candidate bytes, consumed authorizations, and unchanged Relay and Bulletin code.
 
-The network then stopped cleanly: Relay RPC ports `9944` and `9945` and parachain RPC ports `9910`,
-`9914`, and `9920` were closed, and every related process exited. Results and snapshots remain local
-and are not tracked by Git. The retained artifact directory used about 27 GiB, with 223 GiB free
-after the final run.
+All 15 one-minute samples advanced. Over the full 900 seconds, Relay advanced
+`32634013 -> 32634163` (+150), Asset Hub `19672032 -> 19672482` (+450), People
+`8762610 -> 8763060` (+450), and Bulletin `1448847 -> 1448997` (+150). The post-checkpoint logs
+showed FRAME migration assessments, Asset Hub's `PGAS asset created`, and People's
+`lite people collection created`. They also contained recurring parachain
+`AuthorityDiscoveryApi_authorities` compatibility noise from the omni-node, present before and
+after the upgrades; no panic, failed migration, or essential-task failure appeared.
+
+The network stopped cleanly. RPC ports `61591` through `61595` had no listeners, and no
+`polkadot`, parachain node, Zombie Bite, or upgrade-client process remained. Results and snapshots
+remain local and untracked in
+`integration-tests/polkadot-live-fork/artifacts-rerun-20260822-1408`. After stopped-network working
+copies and rejected repair archives were removed, the retained evidence used 3.0 GiB and 251 GiB
+remained free.

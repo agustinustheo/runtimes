@@ -161,21 +161,23 @@ Run `make stop` after all checks pass.
 Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
 file and tears down every node.
 
-## Recorded timing from the 2026-08-20 validated runs
+## Recorded timing from the 2026-08-23 validated run
 
-The local timezone was UTC+7. Fresh capture and the configured 15-minute verification were run
-separately so the latter could reuse only the immutable snapshots produced by the former.
+The local timezone was UTC+7. The user requested reuse of the retained capture, so no production
+chain was resynchronized. Fresh candidates were built before the local network was restored.
 
 | Phase | Measured duration |
 |---|---:|
-| Fresh Asset Hub and People candidate build | `14 min 13 s` |
-| Complete fresh four-chain capture | `2 h 25 min 41 s` |
-| Fresh local network startup | `44 s` |
-| Fork-boundary verification | `14.52 s` |
-| Pre-upgrade verification | `24.24 s` |
-| Ordered Asset Hub then People upgrade | `8 min 21 s` |
-| Snapshot-reuse startup with runtime log filters | `50 s` |
-| Configured post-upgrade verification | `15 min 1 s` |
+| Fresh candidate outputs completed | Asset Hub `10:28`, People `10:38` UTC+7; start timestamp not retained |
+| Production state synchronization | Skipped as requested |
+| Snapshot restoration to ready marker | `42 s` |
+| Successful fork-boundary verification | `1 min 20 s` including public-RPC latency |
+| Pre-upgrade verification | `25 s` |
+| Runtime-log checkpoint | `<1 s` |
+| Ordered Asset Hub then People upgrade | `7 min 26 s` |
+| Configured post-upgrade verification | `15 min` plus sub-second overhead |
+| Runtime-log extraction | `1 s` |
+| Stop request to spawner exit | `22 s` |
 
 The pre-upgrade block-production check remains 24 seconds. The final verification used the full
 900-second default and sampled all four chains every minute. Synchronization time depends on public
@@ -204,9 +206,9 @@ The supplied terminal output proves these results:
 - Asset Hub and People started at runtime version `2003002`.
 - Both candidate authorizations were present.
 - All four chains advanced before the upgrades.
-- Asset Hub upgraded to `2003003`.
+- Asset Hub upgraded to `2003004`.
 - The Asset Hub PGAS and Revive checks passed.
-- People upgraded to `2003003`.
+- People upgraded to `2003004`.
 - The Individuality pallets appeared in People metadata.
 - The People-to-Asset-Hub XCM completed.
 - Asset Hub activated the Individuality subscription.
@@ -215,42 +217,42 @@ The supplied terminal output proves these results:
 - Asset Hub and People used the exact candidate runtime bytes.
 - Both runtime authorizations were consumed.
 - All 15 one-minute samples showed all four chains producing blocks after the upgrades.
-- The post-checkpoint logs showed both migration assessments, Asset Hub's PGAS creation, and the
-  People notifier's automatic `send_init_page` hook.
-- The scoped logs contained no runtime error, panic, failed migration, or essential-task failure.
+- The post-checkpoint logs showed both migration assessments, Asset Hub's `PGAS asset created`, and
+  People's `lite people collection created` automatic migration hook.
+- The scoped logs contained recurring omni-node `AuthorityDiscoveryApi_authorities` compatibility
+  noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
 The complete Terminal 2 output included this final result:
 
 ```text
-relay: advanced 32633827 -> 32633977
-asset-hub: advanced 19671477 -> 19671927
-people: advanced 8762055 -> 8762505
-bulletin: advanced 1448662 -> 1448812
+relay: advanced 32634013 -> 32634163
+asset-hub: advanced 19672032 -> 19672482
+people: advanced 8762610 -> 8763060
+bulletin: advanced 1448847 -> 1448997
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ./scripts/stop.sh
 ```
 
-This output completes the final 900-second block-production check. Relay RPC ports `9944` and
-`9945` and parachain RPC ports `9910`, `9914`, and `9920` were closed after the monitor exited, and
-every related process had stopped.
+This output completes the final 900-second block-production check. RPC ports `61591` through
+`61595` had no listeners after the monitor exited, and every related process had stopped.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub: `8725a283cd6b0c42c856076525a14ce159e1273b59d89df4fbd40aa0ec6b4d1d`
-- People: `1f9c932b21146bb7dacad2a712720ff6b18b21fa7fdaede05e3317626268578c`
+- Asset Hub: `ad6bd8be374b649df4f814b5a80df85da498e88096427431416ab2c5c9a7f9ed`
+- People: `3d8ff55e919f6b9fcaceed6e27b3cb64cd3f803deae1b95b9ebd0f7761f1c8a5`
 
 The four non-empty snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `336156821` | `f7f4cf9f5e1621589e22b6188927e3c4a1e1408340876781fcce0a8eaa12bc13` |
-| Asset Hub | `2745958341` | `a65051cbd429ca1f194179330e402a297625a246362e0efa0c26bd6d23d8ed72` |
-| People | `4862354` | `f7c84883d31e5ca3f1c1a380668511a9b6da11c8f1adb683d1eaff673d4cf1fa` |
-| Bulletin | `2592014` | `da906f5c76508d86416d624bca9155260e3f4a791d807e30099e893f90670bc6` |
+| Relay | `222648491` | `68f12831e82e79a317edabf8a1b3f431e6b74ec8048b5c191b21d132d98bf5c7` |
+| Asset Hub | `2693327297` | `e30041c591da2a7d7e904fde542faaea4ad9a8fa17ddba8257ba09e83f5295d1` |
+| People | `4857392` | `f5cf2b83922a670e0318ff13d6273fcac28cf3093e952eeba225d53190ec40ac` |
+| Bulletin | `2898112` | `e84cc7285aeabe70c744fc5e5d3ed5d09e4c00f0ef5c372c431cdc7ca10051e3` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/.worktrees/zombie-bite-manual-20260820-1200/integration-tests/polkadot-live-fork/artifacts-clean-proof-manual-20260820-1200`.
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-rerun-20260822-1408`.
 It is intentionally untracked and was not pushed.
 
 ## Warnings and normal waits
@@ -267,9 +269,9 @@ only if the process still has peers or the downloaded byte count continues to in
 
 Keep enough free space for the Rust build, captured snapshots, and spawned working copies.
 
-The retained manual artifact directory used approximately 27 GiB after the run. Start a cold clean
+The retained artifact directory used approximately 3.0 GiB after the run. Start a cold clean
 run with at least 250 GiB free because temporary capture data, build products, and spawned working
-copies can coexist while the test is active. The final filesystem check reported 223 GiB free.
+copies can coexist while the test is active. The final filesystem check reported 251 GiB free.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.
