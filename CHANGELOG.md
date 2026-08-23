@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- People Polkadot: align the Individuality SDK dependency pin with `individuality-community` main (`3e4a9a8…`), add `pallet-people-airdrops`, and make lite-person registration fee-backed. The new product-context derivation uses the Polkadot suffix; aliases made with the prior static contexts on zombie-bite forks no longer resolve.
+- Asset Hub Polkadot: align the Individuality SDK dependency pin with `individuality-community` main and adopt the alias-account stale-mapping sweep/offchain worker rework. Collators must run with offchain workers enabled.
+
 - People Polkadot: deploy the Individuality SDK personhood stack from [`paritytech/individuality`](https://github.com/paritytech/individuality), ported from that repository's `next-people-paseo` reference runtime and configured in the new `individuality` module.
   - Ring-membership infrastructure: `pallet-chunks-manager` (the Bandersnatch ring-VRF SRS), `pallet-members` (member collections, ring roots, proof verification) and `pallet-members-notifier` (publishes ring roots to subscribing parachains over XCM).
   - Personhood: `pallet-people` (the registry, `PersonalIdentity`/`PersonalAlias` origins), `pallet-people-lite` (device-attestation personhood) and `pallet-dummy-dim` (governance-driven recognition).
@@ -33,6 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Asset Hub Polkadot & Kusama: fix `pallet-remote-proxy` dropping the newest relay storage root when multiple parachain blocks share one relay parent. `on_validation_data` now skips storing duplicate relay blocks, which used to fill the bounded `BlockToRoot` vector with copies too young to prune and silently drop the newest root, so remote-proxy proofs anchored at recent relay blocks no longer fail with `UnknownProofAnchorBlock` ([#1230](https://github.com/polkadot-fellows/runtimes/issues/1230)).
 - Asset Hub Polkadot: suspend `NextAssetId` while the PGAS migration creates its fixed-id asset, so `force_create` accepts it and the auto-increment sequence resumes unchanged.
+- Polkadot & Kusama system parachains that pass aliasers to their XCM barrier: stop passing the storage-reading `pallet_xcm::AuthorizedAliasers` filter to `AllowExplicitUnpaidExecutionFrom`. `TrustedAliasers` is now split into a computation-only `CheapTrustedAliasers` (used by the barrier) and `(CheapTrustedAliasers, AuthorizedAliasers<Runtime>)` (still `xcm_executor::Config::Aliasers`); aliases that only `AuthorizedAliasers` permits must now buy execution via the paid barrier instead of using `UnpaidExecution` ([#1237](https://github.com/polkadot-fellows/runtimes/pull/1237)).
+
+### Removed
+
+- All runtimes: remove `pallet_xcm::migration::MigrateToLatestXcmVersion`, which ran on every runtime upgrade as the `Permanent` migration. Stored XCM data is already at the current `XCM_VERSION`, so re-running it on each upgrade is pure overhead. The now-empty `Permanent` alias is gone and `SingleBlockMigrations` is just `Unreleased`; a future `XCM_VERSION` bump must add this migration to that release's `Unreleased` list ([#1244](https://github.com/polkadot-fellows/runtimes/pull/1244)).
 
 ## [2.3.2] 23.07.2026
 
