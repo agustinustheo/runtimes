@@ -15,26 +15,6 @@
 
 //! The Individuality SDK on People Polkadot.
 //!
-//! This module configures the whole [Individuality](https://github.com/paritytech/individuality)
-//! pallet set that lives on the People Chain. It is a port of the `next-people-paseo` reference
-//! runtime of that repository; the configuration values are kept identical wherever they are not
-//! network specific.
-//!
-//! TODO: audit every hard-written value in this module before release. Keeping the reference
-//! runtime's values made the port reviewable, but "identical to Paseo" is the wrong default for the
-//! ones that carry real value or real time:
-//!
-//! * Currency-denominated constants mean something different here. A literal such as `2 * UNITS` is
-//!   2 PAS on the reference chain and 2 DOT here — same number, ~3 orders of magnitude apart in
-//!   value.
-//! * Constants counted in blocks must use this chain's 2s block time; see [`time`] and
-//!   [`relay_time`] for the two paces in play, and pick deliberately between them.
-//! * Anything denominated in the backing stablecoin ties this chain's economics to
-//!   [`StableAssetLocation`], a Hydration-issued asset.
-//!
-//! This is expected to be revisited in a follow-up refactor; the individual sites are marked with
-//! their own TODOs.
-//!
 //! # The pieces
 //!
 //! * [`indiv_pallet_chunks_manager`] holds the Bandersnatch ring-VRF SRS. Everything below that
@@ -105,13 +85,10 @@ use super::*;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use cumulus_primitives_core::ParaId;
-#[cfg(not(feature = "runtime-benchmarks"))]
-use frame_support::traits::NeverEnsureOrigin;
 use frame_support::{
 	parameter_types,
 	traits::{
-		AsEnsureOriginWithArg, ConstBool, ConstU128, ConstUint, ConstantStoragePrice, ContainsPair,
-		Get, PalletInfoAccess,
+		ConstBool, ConstU128, ConstUint, ConstantStoragePrice, ContainsPair, Get, PalletInfoAccess,
 		fungible::{HoldConsideration, ItemOf},
 		tokens::ConversionToAssetBalance,
 	},
@@ -131,7 +108,7 @@ use scale_info::TypeInfo;
 use sp_runtime::MultiSigner;
 use sp_runtime::{
 	DispatchError, DispatchResult, MultiSignature,
-	traits::{AccountIdConversion, ConstI8, ConstU16, Convert, Verify},
+	traits::{AccountIdConversion, ConstI8, ConstU16, Convert},
 };
 use sp_statement_store::StatementAllowance;
 // NOTE: deliberately not `xcm::latest::prelude::*` — its `Assets` would shadow the `Assets` pallet
@@ -217,8 +194,8 @@ pub type RuntimeClock = Timestamp;
 pub type RuntimeClock = benchmark_utils::BenchmarkClock;
 
 parameter_types! {
-	/// Product-context suffix for the Polkadot deployment.
-	pub const NetworkSuffix: &'static [u8] = b"polkadot";
+	pub DefaultNetworkSuffix: indiv_support::context::ProductContextNetworkSuffix =
+		b"polkadot".to_vec().try_into().expect("default network suffix fits");
 
 	/// Page size for the ring-VRF SRS chunk storage.
 	pub const ChunkPageSize: u32 = 255;
@@ -267,6 +244,20 @@ parameter_types! {
 		Location::new(0, [PalletInstance(<Coinage as PalletInfoAccess>::index() as u8)]);
 }
 
+impl indiv_pallet_network_suffix::Config for Runtime {
+	type UpdateOrigin = EnsureRoot<Self::AccountId>;
+	type DefaultSuffix = DefaultNetworkSuffix;
+	type WeightInfo = NetworkSuffixWeightInfo;
+}
+
+/// Conservatively reuse the heavier `pallet_parameters` setter weight.
+pub struct NetworkSuffixWeightInfo;
+impl indiv_pallet_network_suffix::WeightInfo for NetworkSuffixWeightInfo {
+	fn set_network_suffix(_s: u32) -> frame_support::weights::Weight {
+		<weights::pallet_parameters::WeightInfo<Runtime> as pallet_parameters::WeightInfo>::set_parameter()
+	}
+}
+
 impl indiv_pallet_relay_randomness::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_relay_randomness::WeightInfo<Runtime>;
 }
@@ -306,6 +297,7 @@ impl frame_support::traits::Contains<Context> for AccountContexts {
 	fn contains(context: &Context) -> bool {
 		context == &indiv_pallet_score::Pallet::<Runtime>::score_context()
 			|| context == &indiv_pallet_resources::Pallet::<Runtime>::resources_context()
+			|| context == &indiv_pallet_people_airdrops::Pallet::<Runtime>::people_airdrops_context()
 	}
 }
 
@@ -396,76 +388,6 @@ impl indiv_pallet_score::Config for Runtime {
 	type Crypto = BandersnatchVrfVerifiable;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::ScoreBenchmarkHelper;
-}
-
-parameter_types! {
-	pub NftsPalletFeatures: pallet_nfts::PalletFeatures = pallet_nfts::PalletFeatures::all_enabled();
-	/// One year, counted in *relay chain* blocks: `pallet-nfts` below sets
-	/// `BlockNumberProvider = RelaychainDataProvider`, so this must use the relay pace (6s) and not
-	/// this chain's own 2s [`time`] constants.
-	pub const NftsMaxDeadlineDuration: BlockNumber = 12 * 30 * relay_time::DAYS;
-}
-
-// All deposits are zero: the attestation NFT collection is owned by a pallet-derived account with
-// no funds and minting must be free. Public collection creation is closed off via `CreateOrigin`
-// instead.
-#[cfg(not(feature = "runtime-benchmarks"))]
-parameter_types! {
-	pub const NftsCollectionDeposit: Balance = 0;
-	pub const NftsItemDeposit: Balance = 0;
-	pub const NftsMetadataDepositBase: Balance = 0;
-	pub const NftsAttributeDepositBase: Balance = 0;
-	pub const NftsDepositPerByte: Balance = 0;
-}
-
-// The upstream `redeposit` benchmark asserts deposit updates, which zero deposits can never
-// produce, so the benchmarks run with Asset Hub-like deposit amounts. This slightly overweighs the
-// zero-deposit production paths, which is the conservative direction.
-#[cfg(feature = "runtime-benchmarks")]
-parameter_types! {
-	pub const NftsCollectionDeposit: Balance = system_para_deposit(1, 130);
-	pub const NftsItemDeposit: Balance = system_para_deposit(1, 164) / 40;
-	pub const NftsMetadataDepositBase: Balance = system_para_deposit(1, 129) / 10;
-	pub const NftsAttributeDepositBase: Balance = system_para_deposit(1, 0) / 10;
-	pub const NftsDepositPerByte: Balance = system_para_deposit(0, 1);
-}
-
-/// A `pallet-nfts` instance compatible with the Asset Hub one (`u32` collection and item
-/// identifiers) so items can eventually be transferred there via XCM. Public collection creation is
-/// disabled: collections are created internally (by the game) or by the root origin via
-/// `force_create`.
-impl pallet_nfts::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type CollectionId = u32;
-	type ItemId = u32;
-	type Currency = Balances;
-	// The benchmarks exercise the public `create` call, so they need an origin that can succeed.
-	#[cfg(not(feature = "runtime-benchmarks"))]
-	type CreateOrigin = AsEnsureOriginWithArg<NeverEnsureOrigin<AccountId>>;
-	#[cfg(feature = "runtime-benchmarks")]
-	type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
-	type ForceOrigin = EnsureRoot<AccountId>;
-	type Locker = ();
-	type CollectionDeposit = NftsCollectionDeposit;
-	type ItemDeposit = NftsItemDeposit;
-	type MetadataDepositBase = NftsMetadataDepositBase;
-	type AttributeDepositBase = NftsAttributeDepositBase;
-	type DepositPerByte = NftsDepositPerByte;
-	type StringLimit = ConstU32<256>;
-	type KeyLimit = ConstU32<64>;
-	type ValueLimit = ConstU32<256>;
-	type ApprovalsLimit = ConstU32<20>;
-	type ItemAttributesApprovalsLimit = ConstU32<30>;
-	type MaxTips = ConstU32<10>;
-	type MaxDeadlineDuration = NftsMaxDeadlineDuration;
-	type MaxAttributesPerCall = ConstU32<10>;
-	type Features = NftsPalletFeatures;
-	type OffchainSignature = Signature;
-	type OffchainPublic = <Signature as Verify>::Signer;
-	type WeightInfo = weights::pallet_nfts::WeightInfo<Runtime>;
-	#[cfg(feature = "runtime-benchmarks")]
-	type Helper = ();
-	type BlockNumberProvider = RelaychainDataProvider<Runtime>;
 }
 
 parameter_types! {
@@ -1480,7 +1402,7 @@ pub mod benchmark_utils {
 			.expect("benchmark: people collection must be created");
 
 			let secret =
-				BandersnatchVrfVerifiable::new_secret(sp_core::twox_256(b"honour-bench-voter"));
+				BandersnatchVrfVerifiable::new_secret(sp_crypto_hashing::twox_256(b"honour-bench-voter"));
 			let member = BandersnatchVrfVerifiable::member_from_secret(&secret);
 
 			Members::add_members(indiv_pallet_people::PEOPLE_MEMBER_IDENTIFIER, vec![member])
@@ -1783,7 +1705,7 @@ pub mod benchmark_utils {
 			indiv_pallet_members::Pallet::<Runtime>::initialize_chunks(ring_exponent);
 
 			let secret =
-				BandersnatchVrfVerifiable::new_secret(sp_core::twox_256(b"people_for_coinage:42"));
+				BandersnatchVrfVerifiable::new_secret(sp_crypto_hashing::twox_256(b"people_for_coinage:42"));
 			let member = BandersnatchVrfVerifiable::member_from_secret(&secret);
 
 			// Onboard members immediately.
