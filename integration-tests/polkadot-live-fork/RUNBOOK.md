@@ -224,57 +224,52 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The latest 2026-08-23 validation restored the retained capture locally and did not contact
-production peers for a new state sync. Its measured timings were:
+The latest 2026-08-26 validation performed a fresh production synchronization for Relay, Asset
+Hub, People, and Bulletin with both artifact-reuse variables explicitly unset. Its measured timings
+were:
 
-- candidate build: 14 minutes 4 seconds;
-- local rematerialization with fresh authorizations: 8 minutes 30 seconds;
-- final spawn to `network is up and running`: 46 seconds;
-- successful fork-boundary verification: 15 seconds;
+- cold candidate build: about 14 minutes;
+- fresh four-chain production capture: 1 hour 8 minutes 25 seconds;
+- final spawn to `network is up and running`: 49 seconds;
+- successful fork-boundary verification: 18 seconds;
 - pre-upgrade verification: 24 seconds;
 - runtime-log checkpoint: less than 1 second;
 - ordered Asset Hub then People upgrade: 8 minutes 20 seconds, including the one-time client build;
-- configured post-upgrade verification: exactly 15 minutes plus sub-second command overhead;
-- runtime-log extraction: 1 second; and
-- stop request to foreground-spawner exit: 1 minute 8 seconds, including stopped-state snapshots.
+- configured post-upgrade verification: exactly 15 minutes plus command overhead;
+- runtime-log extraction: about 1 second; and
+- stop request to foreground-spawner exit: 1 minute 19 seconds, including stopped-state snapshots.
 
 The candidates were built with `CARGO_BUILD_JOBS=2` and
-`WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. A fresh production capture was
-intentionally skipped. The local rematerialization explicitly unset every artifact-reuse variable
-and used only localhost peers backed by the retained snapshots.
+`WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. The run used the existing pinned
+`polkadot-omni-node 1.24.2-weekly2026w34-eb220fa14e7`; successful live capture, spawn, and runtime
+activation established compatibility, so no binary or `versions.env` pin was changed.
 
 ## Latest validated results
 
-The retained capture recorded Relay `32633720`, Asset Hub `19671181`, People `8761757`, and
-Bulletin `1448558`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and
-`2002001`. The 2026-08-23 rerun did not resynchronize those chains. The exact Asset Hub and People
-`2003003` candidate SHA-256 hashes were
-`802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee` and
-`7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e`.
+The fresh capture recorded Relay `32712267`, Asset Hub `19876878`, People `8984982`, and Bulletin
+`1526672`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
+The exact Asset Hub and People `2003003` candidate SHA-256 hashes were
+`71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774` and
+`7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc`.
 
-The final 900-second verification advanced Relay `32633994 -> 32634144` (+150), Asset Hub
-`19671975 -> 19672425` (+450), People `8762554 -> 8763004` (+450), and Bulletin
-`1448829 -> 1448979` (+150). Runtime logs showed the FRAME migration assessment on both upgraded
-collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People, and the
-notifier offchain worker submitting `send_init_page`. The
+The final 900-second verification advanced Relay `32712376 -> 32712526` (+150), Asset Hub
+`19877180 -> 19877630` (+450), People `8985284 -> 8985734` (+450), and Bulletin
+`1526779 -> 1526929` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
+upgraded collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People,
+and the notifier offchain worker submitting `send_init_page`. The
 omni-node emitted recurring `AuthorityDiscoveryApi_authorities` compatibility messages both before
 and after the upgrades, but there was no panic, failed migration, or essential-task failure.
 
-The first +900-second sample exposed an extra near-zero deadline sample in the verifier. The loop
-was corrected, a 20-second regression passed, and the complete 900-second verifier was rerun to the
-success summary above.
+The fresh capture snapshot SHA-256 hashes were Relay
+`1b79a9750adaa8df12b8b90e6a85d436a2c35ca7df42d579c519364b9335697b`, Asset Hub
+`ac0fe88cf201b7d6d7f7da49dcf3cd67b63a39d7c89f59761178621325ca5530`, People
+`a8f907ca7da430d0c3e1b2ded1e8cfb249d0b0de53ef15ca5881c2589be726ef`, and Bulletin
+`787743ba15eb3273ecdf5688c6ff642f36c5126287351c6477a867ed3c9fae79`.
 
-The final snapshot SHA-256 hashes were Relay
-`a7092327c4afff3a789bdf77c6435c13d905d6d112c80b8f6b50f1a1358123ee`, Asset Hub
-`e8e4401cfbbc25150a1c1a7b6da6315b026027901f5ba648968810cc50499132`, People
-`579e518ae5441b49abb4355e356359a43f8f2b6a86cb19e309ab4d225baa0bdb`, and Bulletin
-`cc2bb453cfd07196e452356b7d647aff90548bc9eaffce89dae61bb789cc2f91`.
-
-After `make stop`, ports `61964` through `61968` and every dynamically allocated node port had no
-listeners, and every related process had
-exited. The retained local artifact directory is
-`integration-tests/polkadot-live-fork/artifacts-pr2-aff953-ed25519-refresh-20260823-1330`; it used
-3.4 GiB after cleanup, with 92 GiB free.
+After `make stop`, the five fixed RPC ports and all 30 dynamically allocated node ports had no
+listeners, and every artifact-related process had exited. The retained local artifact directory is
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260826-001`; it uses 27
+GiB including stopped working databases, with 232 GiB free.
 
 ## Troubleshooting
 

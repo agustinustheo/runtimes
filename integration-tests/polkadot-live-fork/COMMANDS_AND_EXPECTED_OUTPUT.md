@@ -129,8 +129,8 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The 2026-08-20 fresh capture took 2 hours 25 minutes 41 seconds. Capture time depends on public
-peer availability and can vary substantially.
+The 2026-08-26 fresh capture took 1 hour 8 minutes 25 seconds. Capture time depends on public peer
+availability and can vary substantially.
 
 ## 5. Confirm the capture files
 
@@ -145,10 +145,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 19671181,
-  "para_1004_start_block": 8761757,
-  "para_1010_start_block": 1448558,
-  "rc_start_block": 32633720
+  "para_1000_start_block": 19876878,
+  "para_1004_start_block": 8984982,
+  "para_1010_start_block": 1526672,
+  "rc_start_block": 32712267
 }
 ```
 
@@ -190,8 +190,8 @@ Block #<relay-block-3>
 network is up and running...
 ```
 
-The 2026-08-20 fresh run took 44 seconds from `make spawn` to the ready message. The later
-snapshot-reuse rerun with the explicit runtime log filters took 50 seconds.
+The 2026-08-26 fresh run took 49 seconds from `make spawn` to the ready message with the explicit
+runtime log filters enabled.
 
 Leave Terminal 1 open. Continue in Terminal 2.
 
@@ -368,10 +368,11 @@ make inspect-runtime-logs
 ```
 
 The output must contain the runtime-upgrade and migration assessment on both collators. In the
-latest 2026-08-23 run it included `PGAS asset created` on Asset Hub, `lite people collection
-created` on People, and a successful notifier `send_init_page` submission, together with FRAME
-migration-assessment lines for the new pallets. The independent state check also proved that the
-People initialization XCM activated the Asset Hub subscription.
+latest 2026-08-26 run it included XcmpQueue migration from version 6 to 7 on both chains, `PGAS
+asset created` on Asset Hub, `lite people collection created` on People, and a successful notifier
+`send_init_page` submission, together with FRAME migration-assessment lines for the new pallets.
+The independent state check also proved that the People initialization XCM activated the Asset Hub
+subscription.
 Manually review the excerpt and treat panics, upgrade execution errors, failed migrations, or
 essential-task failures as test failures. The excerpt is saved locally as
 `<artifact-directory>/runtime-upgrade-logs.txt`. A quiet subscriber hook is not itself a failure;
@@ -382,30 +383,28 @@ The omni-node can also emit recurring `sub-authority-discovery` messages saying 
 that same node/runtime-API compatibility noise before and after the upgrades while all state and
 block-production checks passed; do not confuse it with a failed runtime migration.
 
-### Recorded 2026-08-23 final result
+### Recorded 2026-08-26 final result
 
-The first +900-second sample exposed a deadline-loop bug that caused one unintended near-zero
-follow-up sample. The loop was fixed, a 20-second regression passed, and the required 900-second
-command was rerun from the upgraded network. The successful rerun produced this aggregate
+The full default 900-second command passed on its first run and produced this aggregate
 advancement:
 
 ```text
-relay: advanced 32633994 -> 32634144
-asset-hub: advanced 19671975 -> 19672425
-people: advanced 8762554 -> 8763004
-bulletin: advanced 1448829 -> 1448979
+relay: advanced 32712376 -> 32712526
+asset-hub: advanced 19877180 -> 19877630
+people: advanced 8985284 -> 8985734
+bulletin: advanced 1526779 -> 1526929
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee` and People
-`7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e`.
+`71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774` and People
+`7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc`.
 
-The retained final snapshot hashes were Relay
-`a7092327c4afff3a789bdf77c6435c13d905d6d112c80b8f6b50f1a1358123ee`, Asset Hub
-`e8e4401cfbbc25150a1c1a7b6da6315b026027901f5ba648968810cc50499132`, People
-`579e518ae5441b49abb4355e356359a43f8f2b6a86cb19e309ab4d225baa0bdb`, and Bulletin
-`cc2bb453cfd07196e452356b7d647aff90548bc9eaffce89dae61bb789cc2f91`.
+The fresh capture snapshot hashes were Relay
+`1b79a9750adaa8df12b8b90e6a85d436a2c35ca7df42d579c519364b9335697b`, Asset Hub
+`ac0fe88cf201b7d6d7f7da49dcf3cd67b63a39d7c89f59761178621325ca5530`, People
+`a8f907ca7da430d0c3e1b2ded1e8cfb249d0b0de53ef15ca5881c2589be726ef`, and Bulletin
+`787743ba15eb3273ecdf5688c6ff642f36c5126287351c6477a867ed3c9fae79`.
 
 ## 12. Stop the network
 

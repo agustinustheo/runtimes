@@ -71,40 +71,39 @@ This harness gives evidence of live-state upgrades and of targeted cross-chain o
 
 ## Latest validated run
 
-The latest 2026-08-23 validation built fresh candidates from PR #2 commit
-`aff95300985e67eb659b9816e63ba0e7ce583729`.
-It did not resynchronize production state. Instead, it restored the retained four-chain snapshots
-to localhost and materialized a new artifact with candidate-specific authorizations. The retained
-boundaries were Relay `32633720`, Asset Hub `19671181`, People `8761757`, and Bulletin `1448558`.
-Their captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
+The latest 2026-08-26 validation built fresh candidates from PR #2 commit
+`f708917a0f9222646c8bcde569039be2392e0f89`. That commit contains the signed PR #1 merge of the
+current PR #1233 stable2606 work and the signed PR #2 merge of PR #1. The run explicitly unset both
+artifact-reuse variables and performed a new production synchronization for all four chains. The
+fresh boundaries were Relay `32712267`, Asset Hub `19876878`, People `8984982`, and Bulletin
+`1526672`. Their captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 
 The exact candidates activated in the run were:
 
 | Candidate | `spec_version` | SHA-256 |
 |---|---:|---|
-| Asset Hub | `2003003` | `802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee` |
-| People | `2003003` | `7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e` |
+| Asset Hub | `2003003` | `71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774` |
+| People | `2003003` | `7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc` |
 
 Asset Hub upgraded before People. Its PGAS, `NextAssetId`, and Revive migration checks passed before
 the People upgrade was submitted. People then exposed the Individuality pallets, sent the pending
 initialization XCM, and activated the Asset Hub subscription. The independent verifier confirmed
 the exact candidate bytes, consumed authorizations, and unchanged Relay and Bulletin code.
 
-The first 900-second observation exposed a verifier deadline bug after its successful +900-second
-sample. The deadline loop was fixed, a 20-second regression passed, and the complete 900-second
-verification was rerun successfully. All 15 one-minute samples advanced. Relay advanced
-`32633994 -> 32634144` (+150), Asset Hub `19671975 -> 19672425` (+450), People
-`8762554 -> 8763004` (+450), and Bulletin `1448829 -> 1448979` (+150). The post-checkpoint logs
-showed FRAME migration assessments, Asset Hub's `PGAS asset created`, People's
+The full, unmodified 900-second verifier passed on its first run. All 15 one-minute samples
+advanced. Relay advanced `32712376 -> 32712526` (+150), Asset Hub
+`19877180 -> 19877630` (+450), People `8985284 -> 8985734` (+450), and Bulletin
+`1526779 -> 1526929` (+150). The post-checkpoint logs showed XcmpQueue migration from version 6 to
+7 on both upgraded chains, Asset Hub's `PGAS asset created`, People's
 `lite people collection created`, and the notifier offchain worker submitting `send_init_page`.
 They also contained recurring parachain
 `AuthorityDiscoveryApi_authorities` compatibility noise from the omni-node, present before and
 after the upgrades; no panic, failed migration, or essential-task failure appeared.
 
-The network stopped cleanly. RPC ports `61964` through `61968` and all dynamically allocated node
-ports had no listeners, and no
-`polkadot`, parachain node, Zombie Bite, or upgrade-client process remained. Results and snapshots
-remain local and untracked in
-`integration-tests/polkadot-live-fork/artifacts-pr2-aff953-ed25519-refresh-20260823-1330`. After
-disposable working databases were removed, the retained evidence used 3.4 GiB and 92 GiB remained
-free.
+The cold candidate build took about 14 minutes, fresh capture took 1 hour 8 minutes 25 seconds,
+spawn reached the ready marker in 49 seconds, the ordered upgrades took 8 minutes 20 seconds, and
+shutdown snapshots plus foreground-spawner exit took 1 minute 19 seconds. The network stopped
+cleanly: all 35 recorded RPC, P2P, and metrics ports were closed and no artifact-related process
+remained. Results and snapshots remain local and untracked in
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260826-001`. The retained
+artifact uses 27 GiB, including 23 GiB of stopped working databases, and 232 GiB remains free.

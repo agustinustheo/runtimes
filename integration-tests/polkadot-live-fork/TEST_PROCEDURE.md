@@ -161,32 +161,30 @@ Run `make stop` after all checks pass.
 Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
 file and tears down every node.
 
-## Recorded timing from the 2026-08-23 validated run
+## Recorded timing from the 2026-08-26 validated run
 
-The local timezone was UTC+7. The user requested reuse of the retained capture, so no production
-chain was resynchronized. Fresh candidates were built from PR #2 commit
-`aff95300985e67eb659b9816e63ba0e7ce583729`. The retained snapshots were restored to localhost and
-a new artifact was materialized with fresh candidate-specific authorizations.
+The local timezone was UTC+7. Fresh candidates were built from PR #2 commit
+`f708917a0f9222646c8bcde569039be2392e0f89`, after merging the current PR #1233 through PR #1 into
+PR #2. Both artifact-reuse variables were explicitly unset and all four production chains were
+resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Fresh candidate build | `14 min 4 s` with `CARGO_BUILD_JOBS=2` |
-| Production state synchronization | Skipped as requested |
-| Local rematerialization to `ready.json` | `8 min 30 s` |
-| Final spawn to ready marker | `46 s` |
-| Successful fork-boundary verification | `15 s` |
+| Fresh candidate build | About `14 min` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `1 h 8 min 25 s` |
+| Final spawn to ready marker | `49 s` |
+| Successful fork-boundary verification | `18 s` |
 | Pre-upgrade verification | `24 s` |
 | Runtime-log checkpoint | `<1 s` |
 | Ordered Asset Hub then People upgrade | `8 min 20 s`, including the one-time client build |
-| Configured post-upgrade verification | `15 min` plus sub-second overhead |
-| Runtime-log extraction | `1 s` |
-| Stop request to spawner exit | `1 min 8 s`, including stopped-state snapshots |
+| Configured post-upgrade verification | `15 min` plus command overhead |
+| Runtime-log extraction | About `1 s` |
+| Stop request to spawner exit | `1 min 19 s`, including stopped-state snapshots |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
-and sampled all four chains every minute. A cold production capture depends on public peer
-availability; this rerun used retained-state localhost peers, and Asset Hub remained the largest
-and slowest local rematerialization.
+and sampled all four chains every minute. The fresh production capture depended on public peer
+availability; Asset Hub was the largest and slowest capture at approximately one hour.
 
 ## Recorded boundaries
 
@@ -194,10 +192,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32633720` |
-| Asset Hub | `19671181` |
-| People | `8761757` |
-| Bulletin | `1448558` |
+| Relay | `32712267` |
+| Asset Hub | `19876878` |
+| People | `8984982` |
+| Bulletin | `1526672` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -222,46 +220,44 @@ The supplied terminal output proves these results:
 - Asset Hub and People used the exact candidate runtime bytes.
 - Both runtime authorizations were consumed.
 - All 15 one-minute samples showed all four chains producing blocks after the upgrades.
-- The post-checkpoint logs showed both migration assessments, Asset Hub's `PGAS asset created`, and
-  People's `lite people collection created` automatic migration hook. The notifier offchain worker
-  also logged a successful `send_init_page` submission.
+- The post-checkpoint logs showed XcmpQueue migration from version 6 to 7 on both chains, Asset
+  Hub's `PGAS asset created`, and People's `lite people collection created` automatic migration
+  hook. The notifier offchain worker also logged a successful `send_init_page` submission.
 - The scoped logs contained recurring omni-node `AuthorityDiscoveryApi_authorities` compatibility
   noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
-The first +900-second sample exposed one unintended near-zero deadline sample. After fixing the
-loop and passing a 20-second regression, the complete 900-second command was rerun successfully
-and included this final result:
+The complete default 900-second command passed on its first run and included this final result:
 
 ```text
-relay: advanced 32633994 -> 32634144
-asset-hub: advanced 19671975 -> 19672425
-people: advanced 8762554 -> 8763004
-bulletin: advanced 1448829 -> 1448979
+relay: advanced 32712376 -> 32712526
+asset-hub: advanced 19877180 -> 19877630
+people: advanced 8985284 -> 8985734
+bulletin: advanced 1526779 -> 1526929
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ./scripts/stop.sh
 ```
 
-This output completes the final 900-second block-production check. RPC ports `61964` through
-`61968` and all dynamically allocated node ports had no listeners after the monitor exited, and
-every related process had stopped.
+This output completes the final 900-second block-production check. The five fixed RPC ports and all
+30 dynamically allocated P2P and metrics ports had no listeners after the spawner exited, and every
+artifact-related process had stopped.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub: `802b74abf8ce99c2c55608a52ddcc5d98ea9a80c8fbcfcb07e5772be4a381aee`
-- People: `7b2a87c59aa4d3eb1ed46ef65dea3baf84dff6c485823bc1fff0560a0df73a8e`
+- Asset Hub: `71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774`
+- People: `7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc`
 
 The four non-empty snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `225260727` | `a7092327c4afff3a789bdf77c6435c13d905d6d112c80b8f6b50f1a1358123ee` |
-| Asset Hub | `2745319084` | `e8e4401cfbbc25150a1c1a7b6da6315b026027901f5ba648968810cc50499132` |
-| People | `4864264` | `579e518ae5441b49abb4355e356359a43f8f2b6a86cb19e309ab4d225baa0bdb` |
-| Bulletin | `2903273` | `cc2bb453cfd07196e452356b7d647aff90548bc9eaffce89dae61bb789cc2f91` |
+| Relay | `332195774` | `1b79a9750adaa8df12b8b90e6a85d436a2c35ca7df42d579c519364b9335697b` |
+| Asset Hub | `2753618008` | `ac0fe88cf201b7d6d7f7da49dcf3cd67b63a39d7c89f59761178621325ca5530` |
+| People | `4857021` | `a8f907ca7da430d0c3e1b2ded1e8cfb249d0b0de53ef15ca5881c2589be726ef` |
+| Bulletin | `2590615` | `787743ba15eb3273ecdf5688c6ff642f36c5126287351c6477a867ed3c9fae79` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-pr2-aff953-ed25519-refresh-20260823-1330`.
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260826-001`.
 It is intentionally untracked and was not pushed.
 
 ## Warnings and normal waits
@@ -278,11 +274,10 @@ only if the process still has peers or the downloaded byte count continues to in
 
 Keep enough free space for the Rust build, captured snapshots, and spawned working copies.
 
-The retained artifact directory used approximately 3.4 GiB after the latest run. Start a cold clean
-run with at least 250 GiB free because temporary capture data, build products, and spawned working
-copies can coexist while the test is active. This no-resync rerun started below the cold-capture
-floor by explicit user direction and reported 92 GiB free after disposable working copies were
-removed.
+The retained artifact directory uses approximately 27 GiB after the latest run, including 23 GiB
+of stopped working databases. Start a cold clean run with at least 250 GiB free because temporary
+capture data, build products, and spawned working copies can coexist while the test is active. This
+fresh capture started with 263 GiB free and reported 232 GiB free after clean shutdown.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.
