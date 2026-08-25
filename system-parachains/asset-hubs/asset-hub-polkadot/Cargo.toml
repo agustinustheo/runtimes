@@ -44,6 +44,7 @@ frame-try-runtime = { optional = true, workspace = true }
 indiv-pallet-alias-accounts = { workspace = true }
 indiv-pallet-dotns-gateway = { workspace = true }
 indiv-pallet-members-subscriber = { workspace = true }
+indiv-pallet-network-suffix = { workspace = true }
 indiv-pallet-origin-restriction = { workspace = true }
 indiv-pallet-pgas = { workspace = true }
 indiv-precompile-personhood = { workspace = true }
@@ -79,6 +80,7 @@ pallet-parameters = { workspace = true }
 pallet-pgas-allowance = { workspace = true }
 pallet-preimage = { workspace = true }
 pallet-proxy = { workspace = true }
+pallet-psm = { workspace = true }
 pallet-referenda = { workspace = true }
 pallet-revive = { workspace = true }
 pallet-scheduler = { workspace = true }
@@ -205,6 +207,7 @@ runtime-benchmarks = [
 	"indiv-pallet-alias-accounts/runtime-benchmarks",
 	"indiv-pallet-dotns-gateway/runtime-benchmarks",
 	"indiv-pallet-members-subscriber/runtime-benchmarks",
+	"indiv-pallet-network-suffix/runtime-benchmarks",
 	"indiv-pallet-origin-restriction/runtime-benchmarks",
 	"indiv-pallet-pgas/runtime-benchmarks",
 	"indiv-precompile-personhood/runtime-benchmarks",
@@ -241,6 +244,7 @@ runtime-benchmarks = [
 	"pallet-pgas-allowance/runtime-benchmarks",
 	"pallet-preimage/runtime-benchmarks",
 	"pallet-proxy/runtime-benchmarks",
+	"pallet-psm/runtime-benchmarks",
 	"pallet-rc-migrator/runtime-benchmarks",
 	"pallet-referenda/runtime-benchmarks",
 	"pallet-revive/runtime-benchmarks",
@@ -298,6 +302,7 @@ try-runtime = [
 	"indiv-pallet-alias-accounts/try-runtime",
 	"indiv-pallet-dotns-gateway/try-runtime",
 	"indiv-pallet-members-subscriber/try-runtime",
+	"indiv-pallet-network-suffix/try-runtime",
 	"indiv-pallet-origin-restriction/try-runtime",
 	"indiv-pallet-pgas/try-runtime",
 	"indiv-precompile-personhood/try-runtime",
@@ -332,6 +337,7 @@ try-runtime = [
 	"pallet-pgas-allowance/try-runtime",
 	"pallet-preimage/try-runtime",
 	"pallet-proxy/try-runtime",
+	"pallet-psm/try-runtime",
 	"pallet-rc-migrator/try-runtime",
 	"pallet-referenda/try-runtime",
 	"pallet-revive/try-runtime",
@@ -397,6 +403,7 @@ std = [
 	"indiv-pallet-alias-accounts/std",
 	"indiv-pallet-dotns-gateway/std",
 	"indiv-pallet-members-subscriber/std",
+	"indiv-pallet-network-suffix/std",
 	"indiv-pallet-origin-restriction/std",
 	"indiv-pallet-pgas/std",
 	"indiv-precompile-personhood/std",
@@ -437,6 +444,7 @@ std = [
 	"pallet-pgas-allowance/std",
 	"pallet-preimage/std",
 	"pallet-proxy/std",
+	"pallet-psm/std",
 	"pallet-rc-migrator/std",
 	"pallet-referenda/std",
 	"pallet-revive/std",

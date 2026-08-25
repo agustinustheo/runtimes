@@ -15,24 +15,7 @@
 
 //! The Individuality SDK on Asset Hub Polkadot.
 //!
-//! Personhood itself lives on People Polkadot; this is the consumer side. It is a port of the
-//! `next-asset-hub-paseo` reference runtime of
-//! [Individuality](https://github.com/paritytech/individuality), with the configuration values kept
-//! identical wherever they are not network specific.
-//!
-//! TODO: audit every hard-written value in this module before release. Keeping the reference
-//! runtime's values made the port reviewable, but "identical to Paseo" is the wrong default for the
-//! ones that carry real value or real time:
-//!
-//! * Currency-denominated constants mean something different here: the same literal is PAS on the
-//!   reference chain and DOT here.
-//! * Constants counted in blocks must use this chain's 2s block time, not the 6s
-//!   `async_backing::MINUTES` this runtime imports for everything else — see [`time`].
-//! * The cross-runtime constants ([`RingRootsNotifierEndpoint`]'s pallet index, the ring exponents)
-//!   have to agree with People Polkadot or proofs silently fail to verify.
-//!
-//! This is expected to be revisited in a follow-up refactor; the individual sites are marked with
-//! their own TODOs.
+//! Personhood itself lives on People Polkadot; this is the consumer side.
 //!
 //! # The pieces
 //!
@@ -63,18 +46,18 @@
 //!    `MembersNotifier::subscribe` naming this chain and the `MembersSubscriber` pallet index (97);
 //!    there is no local call to make. Until the first batch of roots arrives, every personhood
 //!    proof on this chain fails. Requires an open HRMP channel in both directions.
-//! 3. `DotnsGateway::set_dispatcher_address` (Fellowship or root) — point the gateway at the deployed
-//!    `RootGatewayDispatcher` contract. `pallet-dotns-gateway` cannot register any name until this
-//!    is set, so the dotNS registry contract has to be deployed first.
-//! 4. Set the governance-mutable alias fee if desired, then run collators with offchain workers
-//!    enabled so the alias-account stale-mapping sweep can submit authorized maintenance calls.
+//! 3. `DotnsGateway::set_dispatcher_address` (Fellowship, root, or TechnicalMaintenance) — point
+//!    the gateway at the deployed `RootGatewayDispatcher` contract. `pallet-dotns-gateway` cannot
+//!    register any name until this is set, so the dotNS registry contract has to be deployed first.
+//! 4. Run collators with offchain workers enabled so the alias-account stale-mapping sweep can
+//!    submit authorized maintenance calls. The alias fee is governance-mutable.
 //!
-//! Optional, per-provider: `DotnsGateway::set_attestation_allowance` (Fellowship or root) to admit
-//! an attestation provider.
+//! Optional, per-provider: `DotnsGateway::set_attestation_allowance` (Fellowship, root, or
+//! TechnicalMaintenance) to admit an attestation provider.
 
 use super::*;
 
-use frame_support::traits::{ContainsPair, EnsureOrigin};
+use frame_support::traits::{ContainsPair, EnsureOrigin, Get};
 use indiv_support::traits::{Alias, RingExponent};
 #[cfg(feature = "runtime-benchmarks")]
 use indiv_support::traits::{Context, Identifier, RingIndex};
@@ -102,9 +85,14 @@ pub mod time {
 	pub const DAYS: BlockNumber = HOURS * 24;
 }
 
-/// Root or the Technical Fellowship voice on Collectives may administer Individuality settings.
+/// Root, the Technical Fellowship voice, or TechnicalMaintenance may administer Individuality
+/// settings.
 pub type RootOrFellows =
 	EitherOfDiverse<EnsureRoot<AccountId>, EnsureXcm<IsFellowshipVoice<FellowshipLocation>>>;
+
+/// The full administration origin shared by Individuality pallet managers and dynamic parameters.
+pub type RootOrFellowsOrTechnicalMaintenance =
+	EitherOfDiverse<RootOrFellows, TechnicalMaintenance>;
 
 /// PGAS, the non-transferable gas allowance a proven person may claim.
 ///
@@ -132,8 +120,22 @@ parameter_types! {
 	pub const PeopleRingExponent: RingExponent = RingExponent::R2e9;
 	/// Ring exponent of the lite people collection on People Polkadot.
 	pub const PeopleLiteRingExponent: RingExponent = RingExponent::R2e9;
-	/// Product-context suffix for the Polkadot deployment.
-	pub const NetworkSuffix: &'static [u8] = b"polkadot";
+	pub DefaultNetworkSuffix: indiv_support::context::ProductContextNetworkSuffix =
+		b"polkadot".to_vec().try_into().expect("default network suffix fits");
+}
+
+impl indiv_pallet_network_suffix::Config for Runtime {
+	type UpdateOrigin = EnsureRoot<Self::AccountId>;
+	type DefaultSuffix = DefaultNetworkSuffix;
+	type WeightInfo = NetworkSuffixWeightInfo;
+}
+
+/// Conservatively reuse the heavier `pallet_parameters` setter weight.
+pub struct NetworkSuffixWeightInfo;
+impl indiv_pallet_network_suffix::WeightInfo for NetworkSuffixWeightInfo {
+	fn set_network_suffix(_s: u32) -> frame_support::weights::Weight {
+		<weights::pallet_parameters::WeightInfo<Runtime> as pallet_parameters::WeightInfo>::set_parameter()
+	}
 }
 
 /// Origin check restricted to the sibling parachain that publishes the ring roots.
@@ -179,6 +181,14 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type OffchainWorkerInterval = ConstU32<3>;
 }
 
+/// Adapts the runtime's required alias fee to the alias-accounts pallet configuration.
+pub struct AliasFee;
+impl Get<Option<Balance>> for AliasFee {
+	fn get() -> Option<Balance> {
+		Some(dynamic_params::individuality::AliasFee::get())
+	}
+}
+
 impl indiv_pallet_alias_accounts::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_alias_accounts::WeightInfo<Runtime>;
 	type MemberService = MembersSubscriber;
@@ -191,7 +201,7 @@ impl indiv_pallet_alias_accounts::Config for Runtime {
 	type PeopleRingExponent = PeopleRingExponent;
 	type Fungibles = Assets;
 	type PgasAssetId = PgasAssetId;
-	type AliasFee = dynamic_params::individuality::AliasFee;
+	type AliasFee = AliasFee;
 	type OffchainWorkerInterval = indiv_support::parameters::AtLeastOne<
 		dynamic_params::individuality::StaleAliasSweepInterval,
 	>;
@@ -295,8 +305,8 @@ impl indiv_pallet_dotns_gateway::Config for Runtime {
 	type MaxValiditySeconds = dynamic_params::individuality::DotnsMaxValiditySeconds;
 	type MaxFutureSkewSeconds = dynamic_params::individuality::DotnsMaxFutureSkewSeconds;
 	type UnixTime = Timestamp;
-	type AttestationAllowanceManager = RootOrFellows;
-	type DispatcherAddressManager = RootOrFellows;
+	type AttestationAllowanceManager = RootOrFellowsOrTechnicalMaintenance;
+	type DispatcherAddressManager = RootOrFellowsOrTechnicalMaintenance;
 	type AttestationSignature = Signature;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::DotnsGatewayBenchHelper;
@@ -556,7 +566,7 @@ pub mod benchmark_utils {
 				RuntimeParameters::Individuality(
 					dynamic_params::individuality::Parameters::AliasFee(
 						dynamic_params::individuality::AliasFee,
-						Some(Some(fee)),
+						Some(fee),
 					),
 				),
 			)

@@ -69,6 +69,7 @@ pub mod genesis_config_presets;
 pub mod governance;
 pub mod individuality;
 pub mod migrations;
+mod psm;
 #[cfg(all(test, feature = "try-runtime"))]
 mod remote_tests;
 pub mod staking;
@@ -129,9 +130,9 @@ use frame_support::{
 		fungible::{self, HoldConsideration},
 		fungibles,
 		tokens::imbalance::{ResolveAssetTo, ResolveTo},
-		AsEnsureOriginWithArg, ConstBool, ConstU32, ConstU64, ConstU8, Contains, EitherOf,
-		EitherOfDiverse, Equals, InstanceFilter, LinearStoragePrice, NeverEnsureOrigin,
-		PrivilegeCmp, TransformOrigin, WithdrawReasons,
+		AsEnsureOriginWithArg, ConstBool, ConstU32, ConstU64, ConstU8, ConstantStoragePrice,
+		Contains, EitherOf, EitherOfDiverse, Equals, InstanceFilter, LinearStoragePrice,
+		NeverEnsureOrigin, PrivilegeCmp, TransformOrigin, WithdrawReasons,
 	},
 	weights::{ConstantMultiplier, Weight},
 	PalletId,
@@ -139,7 +140,7 @@ use frame_support::{
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	pallet_prelude::BlockNumberFor,
-	EnsureRoot, EnsureSigned, EnsureSignedBy,
+	EnsureRoot, EnsureRootWithSuccess, EnsureSigned, EnsureSignedBy,
 };
 use pallet_asset_conversion_precompiles::AssetConversion as AssetConversionPrecompile;
 use pallet_assets_precompiles::{ForeignAssetId, ForeignIdConfig, InlineIdConfig, ERC20};
@@ -852,6 +853,7 @@ parameter_types! {
 }
 
 impl cumulus_pallet_parachain_system::Config for Runtime {
+	type SchedulingSignatureVerifier = ();
 	type RuntimeEvent = RuntimeEvent;
 	type OnSystemEvent = ();
 	type SelfParaId = parachain_info::Pallet<Runtime>;
@@ -1209,6 +1211,84 @@ impl pallet_asset_conversion::Config for Runtime {
 	>;
 }
 
+// PSM configuration for Asset Hub Polkadot.
+parameter_types! {
+	/// Fixed deposit held for a permissionless PSM created via `create_psm`.
+	pub const PsmCreationDeposit: Balance = 100 * UNITS;
+	pub PsmHoldReason: RuntimeHoldReason =
+		RuntimeHoldReason::Psm(pallet_psm::HoldReason::CreationDeposit);
+	pub const NoPsmDepositor: Option<AccountId> = None;
+	/// PalletId for deriving the PSM system account.
+	pub const PsmPalletId: PalletId = PalletId(*b"py/pegsm");
+}
+
+type PsmAssets = psm::UnionOf<
+	Assets,
+	ForeignAssets,
+	LocalFromLeft<
+		AssetIdForTrustBackedAssetsConvert<TrustBackedAssetsPalletLocation, Location>,
+		AssetIdForTrustBackedAssets,
+		Location,
+	>,
+	Location,
+	AccountId,
+>;
+
+type PsmCreateOrigin = EitherOf<
+	pallet_psm::EnsureAssetOwner<Runtime>,
+	EnsureRootWithSuccess<AccountId, NoPsmDepositor>,
+>;
+
+#[cfg(feature = "runtime-benchmarks")]
+pub struct PsmBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_psm::BenchmarkHelper<Location, AccountId> for PsmBenchmarkHelper {
+	fn get_asset_id(asset_index: u32) -> Location {
+		Location::new(0, [PalletInstance(50), GeneralIndex(asset_index.into())])
+	}
+
+	fn create_asset(asset_id: Location, owner: &AccountId, decimals: u8) {
+		use frame_support::traits::fungibles::{
+			metadata::Mutate as MetadataMutate, Create, Inspect,
+		};
+		if !<PsmAssets as Inspect<AccountId>>::asset_exists(asset_id.clone()) {
+			let _ =
+				<PsmAssets as Create<AccountId>>::create(asset_id.clone(), owner.clone(), true, 1);
+		}
+		let _ = Balances::force_set_balance(
+			RuntimeOrigin::root(),
+			owner.clone().into(),
+			10u128.pow(18),
+		);
+		let _ = <PsmAssets as MetadataMutate<AccountId>>::set(
+			asset_id,
+			owner,
+			b"Benchmark".to_vec(),
+			b"BNC".to_vec(),
+			decimals,
+		);
+	}
+}
+
+impl pallet_psm::Config for Runtime {
+	type Fungibles = PsmAssets;
+	type Consideration = HoldConsideration<
+		AccountId,
+		Balances,
+		PsmHoldReason,
+		ConstantStoragePrice<PsmCreationDeposit, Balance>,
+	>;
+	type CreateOrigin = PsmCreateOrigin;
+	type RuntimeOrigin = RuntimeOrigin;
+	type PalletsOrigin = OriginCaller;
+	type AssetId = Location;
+	type WeightInfo = weights::pallet_psm::WeightInfo<Runtime>;
+	type PalletId = PsmPalletId;
+	type MaxExternals = ConstU32<5>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = PsmBenchmarkHelper;
+}
+
 parameter_types! {
 	pub const PreimageBaseDeposit: Balance = system_para_deposit(2, 64);
 	pub const PreimageByteDeposit: Balance = system_para_deposit(0, 1);
@@ -1282,10 +1362,9 @@ impl frame_support::traits::EnsureOriginWithArg<RuntimeOrigin, RuntimeParameters
 		match key {
 			StakingElection(_) =>
 				EitherOf::<EnsureRoot<AccountId>, StakingAdmin>::ensure_origin(origin.clone()),
-			Individuality(_) => EitherOfDiverse::<
-				individuality::RootOrFellows,
-				TechnicalMaintenance,
-			>::ensure_origin(origin.clone())
+			Individuality(_) => individuality::RootOrFellowsOrTechnicalMaintenance::ensure_origin(
+				origin.clone(),
+			)
 			.map(|_| ()),
 			// technical params, can be controlled by the fellowship voice.
 			Scheduler(_) | MessageQueue(_) => EitherOfDiverse::<
@@ -1382,21 +1461,10 @@ pub mod dynamic_params {
 	}
 
 	/// Individuality economic and policy parameters.
-	///
-	/// The values below are read from `pallet_parameters` storage at use sites. Re-benchmark the
-	/// affected Individuality pallets in the Individuality SDK repository before release so their
-	/// weights account for those reads; do not regenerate weights in this runtime repository.
 	#[dynamic_pallet_params]
 	#[codec(index = 3)]
 	pub mod individuality {
 		/// PGAS minted to a proven person for each successful claim.
-		///
-		/// PGAS is minted for free to anyone proving personhood and pays for contract execution and
-		/// storage deposits. This value, together with the per-period claim caps, therefore sets
-		/// how much free block space and state growth a person is entitled to. Its default
-		/// derives from `ExistentialDeposit`, unlike the reference runtime, so this subsidy has
-		/// not been sized for Polkadot. TODO: double-check it for Polkadot together with
-		/// `MaxClaimsPerPeriodPerPerson`.
 		#[codec(index = 0)]
 		pub static PgasClaimAmount: Balance = 60 * crate::individuality::PgasMinBalance::get();
 		/// Maximum PGAS claims per period for a full person.
@@ -1411,9 +1479,6 @@ pub mod dynamic_params {
 		/// Seconds for which an alias proof remains valid.
 		#[codec(index = 4)]
 		pub static AliasProofValidityWindow: u64 = 300;
-		/// Deprecated: retained for SCALE compatibility with pre-sweep stored parameters.
-		#[codec(index = 5)]
-		pub static AliasCleanupGracePeriod: u64 = 3600;
 		/// Maximum weight available to one dotNS registry-contract call.
 		#[codec(index = 6)]
 		pub static DotnsMaxContractCallWeight: Weight =
@@ -1436,9 +1501,9 @@ pub mod dynamic_params {
 		#[codec(index = 10)]
 		pub static DotnsPersonRegistrationAllowanceRecovery: Balance =
 			50 * CENTS / ((30 * crate::individuality::time::MINUTES) as Balance);
-		/// Optional fee charged for creating an alias mapping.
+		/// Fee charged for creating an alias mapping.
 		#[codec(index = 11)]
-		pub static AliasFee: Option<Balance> = None;
+		pub static AliasFee: Balance = 1;
 		/// Block interval for the alias-account stale-mapping sweep.
 		#[codec(index = 12)]
 		pub static StaleAliasSweepInterval: BlockNumber = HOURS;
@@ -1574,17 +1639,7 @@ impl pallet_revive::Config for Runtime {
 	type FindAuthor = <Runtime as pallet_authorship::Config>::FindAuthor;
 	type AllowEVMBytecode = ConstBool<true>;
 	type FeeInfo = pallet_revive::evm::fees::Info<Address, Signature, EthExtraImpl>;
-	// Storage deposits are denominated in PGAS, so a proven person can deploy and use contracts
-	// from their free PGAS allowance alone — without this, `pallet-pgas-allowance` would let them
-	// pay a contract call's *fee* in PGAS but they would still need DOT for the deposit.
-	//
-	// The backend keeps both currencies working side by side: `charge_and_hold` falls back to the
-	// native currency whenever the payer has too little reducible PGAS and records the amount in
-	// `pallet_revive::NativeDepositOf`, and `refund_on_hold` pays that credit back in native before
-	// touching PGAS. Deposits already held in DOT when this was switched on are *not* covered by
-	// that bookkeeping, though — they predate `NativeDepositOf` — which is what
-	// `pallet_revive::migrations::v4::Migration` in `migrations.rs` exists to fix. That migration
-	// is mandatory: see the comment there.
+	// Enable deposit payment in PGas with fallback in native.
 	type Deposit = pallet_revive::PGasDeposit<
 		Runtime,
 		Assets,
@@ -1676,8 +1731,9 @@ construct_runtime!(
 		ForeignAssets: pallet_assets::<Instance2> = 53,
 		PoolAssets: pallet_assets::<Instance3> = 54,
 		AssetConversion: pallet_asset_conversion = 55,
-		AssetsFreezer: pallet_assets_freezer::<Instance1> = 56,
-		AssetsHolder: pallet_assets_holder::<Instance1> = 57,
+		Psm: pallet_psm = 56,
+		AssetsFreezer: pallet_assets_freezer::<Instance1> = 57,
+		AssetsHolder: pallet_assets_holder::<Instance1> = 58,
 
 		// OpenGov stuff
 		Treasury: pallet_treasury = 60,
@@ -1718,6 +1774,7 @@ construct_runtime!(
 		Pgas: indiv_pallet_pgas = 99,
 		DotnsGateway: indiv_pallet_dotns_gateway = 152,
 		OriginRestriction: indiv_pallet_origin_restriction = 153,
+		NetworkSuffix: indiv_pallet_network_suffix = 154,
 		PgasAllowance: pallet_pgas_allowance = 252,
 
 		// Asset Hub Migration in the 250s
@@ -1733,13 +1790,7 @@ pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedBlock = generic::SignedBlock<Block>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
-/// The `TransactionExtension` to the basic transaction logic, version 0.
-///
-/// **Frozen.** This is byte-for-byte the pipeline this runtime had before the Individuality
-/// deployment, and it must stay that way: legacy signed (extrinsic format v4) transactions and
-/// Ethereum transactions can only ever use version 0, and every already-built signer targets it.
-/// The Individuality extensions live in [`TxExtensionV1`] instead, so nothing here changes and
-/// `transaction_version` does not move.
+/// The `TransactionExtension` pipeline version 0. **Frozen.**
 pub type TxExtensionV0 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	Runtime,
 	(
@@ -1758,21 +1809,7 @@ pub type TxExtensionV0 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	),
 >;
 
-/// The `TransactionExtension` to the basic transaction logic, version 1: version 0 plus the
-/// Individuality pipeline.
-///
-/// Only *general* (extrinsic format v5) transactions can select this version, by encoding `1` as
-/// their extension version. That is what the Individuality flows use anyway, since they carry no
-/// account signature in the extrinsic envelope.
-///
-/// The leading sub-tuple holds the *origin modifiers*: extensions that replace the transaction's
-/// origin with one authenticated by a ring-VRF personhood proof rather than an account signature.
-/// They must all run before `CheckNonce` (which only applies to signed origins) and before the
-/// payment extension.
-///
-/// Because those origins pay no account fee, `RestrictOrigin` follows immediately after to charge
-/// them against a per-origin allowance instead. `ChargePGAS` wraps the ordinary payment extension
-/// so that eligible calls can settle their fee in PGAS instead of DOT.
+/// The `TransactionExtension` pipeline version 1: latest.
 pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	Runtime,
 	(
@@ -1841,15 +1878,6 @@ impl pallet_revive::evm::runtime::EthExtra for EthExtraImpl {
 pub type UncheckedExtrinsic =
 	pallet_revive::evm::runtime::UncheckedExtrinsic<Address, Signature, EthExtraImpl>;
 
-// `pallet-members-subscriber` runs an offchain worker that submits *authorized* transactions:
-// unsigned extrinsics whose validity comes from `frame_system::AuthorizeCall` rather than from a
-// signature. `staking` already supplies the `CreateBare`/`CreateTransaction` half of the plumbing;
-// this fills in the extension such a transaction carries.
-//
-// It submits on extension version 0, not 1: `AuthorizeCall` has been part of version 0 since before
-// the Individuality deployment, and an authorized origin is not one of the anonymous origins
-// `RestrictOrigin` meters, so nothing in version 1 changes how these transactions are validated.
-// Staying on version 0 keeps the submitted payload smaller.
 impl<LocalCall> frame_system::offchain::CreateAuthorizedTransaction<LocalCall> for Runtime
 where
 	RuntimeCall: From<LocalCall>,
@@ -1954,6 +1982,12 @@ impl
 type StakingRcClientBench<T> = pallet_staking_async_rc_client::benchmarking::Pallet<T>;
 
 #[cfg(feature = "runtime-benchmarks")]
+type NominationPoolsBench<T> = pallet_nomination_pools_benchmarking::Pallet<T>;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_nomination_pools_benchmarking::Config for Runtime {}
+
+#[cfg(feature = "runtime-benchmarks")]
 mod benches {
 	use super::*;
 	use alloc::boxed::Box;
@@ -1970,16 +2004,19 @@ mod benches {
 		[pallet_assets_precompiles, AssetsPrecompiles]
 		[pallet_asset_conversion, AssetConversion]
 		[pallet_asset_conversion_tx_payment, AssetTxPayment]
+		[pallet_psm, Psm]
 		[pallet_balances, Balances]
 		[pallet_indices, Indices]
 		[pallet_message_queue, MessageQueue]
 		[pallet_migrations, MultiBlockMigrations]
 		[pallet_multisig, Multisig]
 		[pallet_nfts, Nfts]
+		[pallet_nomination_pools, NominationPoolsBench::<Runtime>]
 		[pallet_preimage, Preimage]
 		[pallet_proxy, Proxy]
 		[pallet_scheduler, Scheduler]
 		[pallet_parameters, Parameters]
+		[indiv_pallet_network_suffix, NetworkSuffix]
 		[pallet_session, SessionBench::<Runtime>]
 		[pallet_uniques, Uniques]
 		[pallet_utility, Utility]
@@ -2236,6 +2273,34 @@ mod benches {
 				Location::new(0, [PalletInstance(50), GeneralIndex(asset_id.into())]);
 			Asset { id: AssetId(asset_location), fun: Fungible(amount) }
 		}
+
+		/// `n` distinct `ForeignAssets`: `Location`-keyed, so the priciest kind to deposit.
+		fn get_assets(n: u32) -> XcmAssets {
+			// Unfunded: `force_create` touches neither the owner's balance nor its references.
+			let owner: AccountId = frame_benchmarking::whitelisted_caller();
+			(0..n)
+				.map(|index| {
+					// Sibling-para location, so this resolves to `ForeignFungiblesTransactor`.
+					let asset_location =
+						Location::new(1, [Parachain(2000), GeneralIndex(index.into())]);
+					// `sufficient`, so depositing needs no native provider reference.
+					assert_ok!(ForeignAssets::force_create(
+						RuntimeOrigin::root(),
+						asset_location.clone(),
+						owner.clone().into(),
+						true,
+						1u128,
+					));
+					Asset { id: AssetId(asset_location), fun: Fungible(1_000_000u128) }
+				})
+				.collect::<Vec<_>>()
+				.into()
+		}
+
+		/// `Utility::batch`, so weighing a `Transact` recurses over every nested call.
+		fn batch_call(calls: Vec<RuntimeCall>) -> Option<RuntimeCall> {
+			Some(RuntimeCall::Utility(pallet_utility::Call::<Runtime>::batch { calls }))
+		}
 	}
 
 	impl pallet_xcm_benchmarks::Config for Runtime {
@@ -2453,10 +2518,10 @@ mod benches {
 		}
 
 		fn alias_origin() -> Result<(Location, Location), BenchmarkError> {
-			Ok((
-				Location::new(1, [Parachain(1001)]),
-				Location::new(1, [Parachain(1001), AccountId32 { id: [111u8; 32], network: None }]),
-			))
+			use system_parachains_common::benchmarking::set_up_worst_case_authorized_alias;
+
+			// Worst case: `AuthorizedAliasers`, the last and priciest `Aliasers` entry.
+			Ok(set_up_worst_case_authorized_alias::<Runtime>())
 		}
 	}
 
@@ -2534,6 +2599,9 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 	impl cumulus_primitives_core::RelayParentOffsetApi<Block> for Runtime {
 		fn relay_parent_offset() -> u32 {
 			RELAY_PARENT_OFFSET
+		}
+		fn max_claim_queue_offset() -> u8 {
+			cumulus_pallet_parachain_system::Pallet::<Runtime>::max_claim_queue_offset()
 		}
 	}
 
@@ -3021,7 +3089,7 @@ ord_parameter_types! {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use frame_support::{assert_noop, assert_ok, hypothetically_ok};
+	use frame_support::{assert_noop, hypothetically_ok};
 	use sp_runtime::{
 		traits::{Dispatchable, Zero},
 		DispatchError,
@@ -3030,182 +3098,7 @@ mod tests {
 
 	type WeightToFee = DotWeightToFee<Runtime>;
 
-	#[test]
-	fn individuality_parameters_are_governance_mutable() {
-		use frame_support::traits::Get;
-		use polkadot_runtime_constants::{
-			fellowship::FELLOWS_RANK, system_parachain::COLLECTIVES_ID,
-		};
-
-		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
-			assert_eq!(
-				dynamic_params::individuality::PgasClaimAmount::get(),
-				60 * individuality::PgasMinBalance::get(),
-			);
-			assert_noop!(
-				Parameters::set_parameter(
-					RuntimeOrigin::signed(AccountId::from([1u8; 32])),
-					RuntimeParameters::Individuality(
-						dynamic_params::individuality::Parameters::PgasClaimAmount(
-							dynamic_params::individuality::PgasClaimAmount,
-							Some(42),
-						),
-					),
-				),
-				DispatchError::BadOrigin,
-			);
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::root(),
-				RuntimeParameters::Individuality(
-					dynamic_params::individuality::Parameters::PgasClaimAmount(
-						dynamic_params::individuality::PgasClaimAmount,
-						Some(42),
-					),
-				),
-			));
-			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), 42);
-
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
-					1,
-					[
-						Parachain(COLLECTIVES_ID),
-						Plurality { id: BodyId::Technical, part: BodyPart::Voice },
-						GeneralIndex(FELLOWS_RANK),
-					],
-				))),
-				RuntimeParameters::Individuality(
-					dynamic_params::individuality::Parameters::AliasProofValidityWindow(
-						dynamic_params::individuality::AliasProofValidityWindow,
-						Some(60),
-					),
-				),
-			));
-			assert_eq!(dynamic_params::individuality::AliasProofValidityWindow::get(), 60);
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::root(),
-				RuntimeParameters::Individuality(
-					dynamic_params::individuality::Parameters::AliasFee(
-						dynamic_params::individuality::AliasFee,
-						Some(Some(42)),
-					),
-				),
-			));
-			assert_eq!(dynamic_params::individuality::AliasFee::get(), Some(42));
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::root(),
-				RuntimeParameters::Individuality(
-					dynamic_params::individuality::Parameters::StaleAliasSweepInterval(
-						dynamic_params::individuality::StaleAliasSweepInterval,
-						Some(0),
-					),
-				),
-			));
-			assert_eq!(dynamic_params::individuality::StaleAliasSweepInterval::get(), 0);
-		});
-	}
-
-	#[test]
-	fn technical_maintenance_can_set_individuality_parameters_only() {
-		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::from(pallet_custom_origins::Origin::TechnicalMaintenance),
-				RuntimeParameters::Individuality(
-					dynamic_params::individuality::Parameters::PgasClaimAmount(
-						dynamic_params::individuality::PgasClaimAmount,
-						Some(42),
-					),
-				),
-			));
-			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), 42);
-
-			assert_noop!(
-				Parameters::set_parameter(
-					RuntimeOrigin::from(pallet_custom_origins::Origin::TechnicalMaintenance),
-					RuntimeParameters::StakingElection(
-						dynamic_params::staking_election::Parameters::SignedPhase(
-							dynamic_params::staking_election::SignedPhase,
-							Some(42),
-						),
-					),
-				),
-				DispatchError::BadOrigin,
-			);
-		});
-	}
-
-	#[test]
-	fn individuality_dynamic_parameter_bounds_are_stored() {
-		use frame_support::traits::Get;
-
-		macro_rules! set_individuality_parameter {
-			($name:ident, $value:expr) => {
-				assert_ok!(Parameters::set_parameter(
-					RuntimeOrigin::root(),
-					RuntimeParameters::Individuality(
-						dynamic_params::individuality::Parameters::$name(
-							dynamic_params::individuality::$name,
-							Some($value),
-						)
-					),
-				));
-			};
-		}
-
-		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
-			set_individuality_parameter!(PgasClaimAmount, Balance::MAX);
-			assert_eq!(dynamic_params::individuality::PgasClaimAmount::get(), Balance::MAX);
-			set_individuality_parameter!(MaxClaimsPerPeriodPerPerson, u32::MAX);
-			assert_eq!(dynamic_params::individuality::MaxClaimsPerPeriodPerPerson::get(), u32::MAX);
-			set_individuality_parameter!(MaxClaimsPerPeriodPerLitePerson, 0u32);
-			assert_eq!(dynamic_params::individuality::MaxClaimsPerPeriodPerLitePerson::get(), 0);
-			set_individuality_parameter!(MaxPgasClaimRecordCleanupPerCall, u32::MAX);
-			assert_eq!(
-				dynamic_params::individuality::MaxPgasClaimRecordCleanupPerCall::get(),
-				u32::MAX,
-			);
-			set_individuality_parameter!(AliasProofValidityWindow, u64::MAX);
-			assert_eq!(dynamic_params::individuality::AliasProofValidityWindow::get(), u64::MAX);
-			set_individuality_parameter!(AliasCleanupGracePeriod, 0u64);
-			assert_eq!(dynamic_params::individuality::AliasCleanupGracePeriod::get(), 0);
-			set_individuality_parameter!(AliasFee, Some(Balance::MAX));
-			assert_eq!(dynamic_params::individuality::AliasFee::get(), Some(Balance::MAX));
-			set_individuality_parameter!(AliasFee, None);
-			assert_eq!(dynamic_params::individuality::AliasFee::get(), None);
-			set_individuality_parameter!(StaleAliasSweepInterval, 0u32);
-			assert_eq!(dynamic_params::individuality::StaleAliasSweepInterval::get(), 0);
-			set_individuality_parameter!(DotnsMaxContractCallWeight, Weight::MAX);
-			assert_eq!(
-				dynamic_params::individuality::DotnsMaxContractCallWeight::get(),
-				Weight::MAX
-			);
-			set_individuality_parameter!(DotnsMaxValiditySeconds, u64::MAX);
-			assert_eq!(dynamic_params::individuality::DotnsMaxValiditySeconds::get(), u64::MAX);
-			set_individuality_parameter!(DotnsMaxFutureSkewSeconds, 0u64);
-			assert_eq!(dynamic_params::individuality::DotnsMaxFutureSkewSeconds::get(), 0);
-			set_individuality_parameter!(DotnsPersonRegistrationAllowanceMax, Balance::MAX);
-			assert_eq!(
-				dynamic_params::individuality::DotnsPersonRegistrationAllowanceMax::get(),
-				Balance::MAX,
-			);
-			set_individuality_parameter!(DotnsPersonRegistrationAllowanceRecovery, 0);
-			assert_eq!(
-				dynamic_params::individuality::DotnsPersonRegistrationAllowanceRecovery::get(),
-				0,
-			);
-		});
-	}
-
-	/// The transaction extension pipeline is versioned: version 0 is the pipeline that predates the
-	/// Individuality deployment and must stay frozen so already-built signers keep working, while
-	/// version 1 carries the Individuality origin modifiers.
-	///
-	/// Freezing version 0 matters more here than on People Polkadot: Ethereum transactions
-	/// (`EthExtraImpl::ExtensionV0`) and legacy signed transactions can only ever use version 0.
-	///
-	/// This pins both: the identifiers of version 0 in order, and the fact that version 1 exists
-	/// and is version 0 plus the Individuality extensions. Any reordering of version 0 breaks live
-	/// signers, so it should only ever change together with `transaction_version`.
+	/// Pin transaction extension version 0 and assert that version 1 appears in the metadata.
 	#[test]
 	fn transaction_extension_versions_are_stable() {
 		use sp_runtime::traits::{Pipeline, PipelineMetadataBuilder, TransactionExtension};
@@ -3242,13 +3135,6 @@ mod tests {
 			v1_indices.iter().map(|i| builder.in_versions[*i as usize].identifier).collect();
 		assert_eq!(builder.by_version.len(), 1, "only version 1 lives outside version 0");
 
-		// Version 1 is version 0 plus the Individuality pipeline: same non-Individuality
-		// identifiers, in the same relative order.
-		//
-		// NOTE: `ChargePGAS` is absent from this list because it is metadata-transparent — it
-		// reports only its inner `ChargeAssetTxPayment` identifier. So this test deliberately
-		// cannot tell version 0's bare payment extension apart from version 1's PGAS-wrapped one;
-		// it pins ordering, not the payment wrapper.
 		let indiv = ["UnitTransactionExtension", "AsPgas", "AsDotnsGateway", "RestrictOrigins"];
 		let v1_without_indiv: Vec<&str> =
 			v1.iter().copied().filter(|id| !indiv.contains(id)).collect();

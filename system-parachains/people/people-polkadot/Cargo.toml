@@ -34,6 +34,7 @@ indiv-pallet-nft-credits = { workspace = true }
 indiv-pallet-honour = { workspace = true }
 indiv-pallet-members = { workspace = true }
 indiv-pallet-members-notifier = { workspace = true }
+indiv-pallet-network-suffix = { workspace = true }
 indiv-pallet-origin-restriction = { workspace = true }
 indiv-pallet-people = { workspace = true }
 indiv-pallet-people-airdrops = { workspace = true }
@@ -53,7 +54,6 @@ pallet-identity = { workspace = true }
 pallet-message-queue = { workspace = true }
 pallet-migrations = { workspace = true }
 pallet-multisig = { workspace = true }
-pallet-nfts = { workspace = true }
 pallet-parameters = { workspace = true }
 pallet-proxy = { workspace = true }
 pallet-session = { workspace = true }
@@ -67,6 +67,7 @@ sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-consensus-aura = { workspace = true }
 sp-core = { workspace = true }
+sp-crypto-hashing = { workspace = true }
 sp-genesis-builder = { workspace = true }
 sp-inherents = { workspace = true }
 sp-io = { workspace = true }
@@ -105,6 +106,7 @@ cumulus-primitives-utility = { workspace = true }
 pallet-collator-selection = { workspace = true }
 parachain-info = { workspace = true }
 parachains-common = { workspace = true }
+system-parachains-common = { workspace = true }
 system-parachains-constants = { workspace = true }
 
 [dev-dependencies]
@@ -145,6 +147,7 @@ std = [
 	"indiv-pallet-game/std",
 	"indiv-pallet-honour/std",
 	"indiv-pallet-members-notifier/std",
+	"indiv-pallet-network-suffix/std",
 	"indiv-pallet-members/std",
 	"indiv-pallet-nft-credits/std",
 	"indiv-pallet-origin-restriction/std",
@@ -169,7 +172,6 @@ std = [
 	"pallet-message-queue/std",
 	"pallet-migrations/std",
 	"pallet-multisig/std",
-	"pallet-nfts/std",
 	"pallet-parameters/std",
 	"pallet-proxy/std",
 	"pallet-session/std",
@@ -192,6 +194,7 @@ std = [
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
 	"sp-core/std",
+	"sp-crypto-hashing/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
 	"sp-io/std",
@@ -203,6 +206,7 @@ std = [
 	"sp-transaction-pool/std",
 	"sp-version/std",
 	"substrate-wasm-builder",
+	"system-parachains-common/std",
 	"system-parachains-constants/std",
 	"verifiable?/std",
 	"xcm-builder/std",
@@ -232,6 +236,7 @@ runtime-benchmarks = [
 	"indiv-pallet-game/runtime-benchmarks",
 	"indiv-pallet-honour/runtime-benchmarks",
 	"indiv-pallet-members-notifier/runtime-benchmarks",
+	"indiv-pallet-network-suffix/runtime-benchmarks",
 	"indiv-pallet-members/runtime-benchmarks",
 	"indiv-pallet-nft-credits/runtime-benchmarks",
 	"indiv-pallet-origin-restriction/runtime-benchmarks",
@@ -253,7 +258,6 @@ runtime-benchmarks = [
 	"pallet-message-queue/runtime-benchmarks",
 	"pallet-migrations/runtime-benchmarks",
 	"pallet-multisig/runtime-benchmarks",
-	"pallet-nfts/runtime-benchmarks",
 	"pallet-parameters/runtime-benchmarks",
 	"pallet-proxy/runtime-benchmarks",
 	"pallet-session/runtime-benchmarks",
@@ -268,6 +272,7 @@ runtime-benchmarks = [
 	"polkadot-runtime-common/runtime-benchmarks",
 	"polkadot-runtime-constants/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"system-parachains-common/runtime-benchmarks",
 	"system-parachains-constants/runtime-benchmarks",
 	"verifiable",
 	"xcm-builder/runtime-benchmarks",
@@ -295,6 +300,7 @@ try-runtime = [
 	"indiv-pallet-game/try-runtime",
 	"indiv-pallet-honour/try-runtime",
 	"indiv-pallet-members-notifier/try-runtime",
+	"indiv-pallet-network-suffix/try-runtime",
 	"indiv-pallet-members/try-runtime",
 	"indiv-pallet-nft-credits/try-runtime",
 	"indiv-pallet-origin-restriction/try-runtime",
@@ -317,7 +323,6 @@ try-runtime = [
 	"pallet-message-queue/try-runtime",
 	"pallet-migrations/try-runtime",
 	"pallet-multisig/try-runtime",
-	"pallet-nfts/try-runtime",
 	"pallet-parameters/try-runtime",
 	"pallet-proxy/try-runtime",
 	"pallet-session/try-runtime",
@@ -330,6 +335,7 @@ try-runtime = [
 	"parachains-common/try-runtime",
 	"polkadot-runtime-common/try-runtime",
 	"sp-runtime/try-runtime",
+	"system-parachains-common/try-runtime",
 	"system-parachains-constants/try-runtime",
 ]
 

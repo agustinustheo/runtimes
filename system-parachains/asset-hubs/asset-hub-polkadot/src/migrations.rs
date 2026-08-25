@@ -185,6 +185,7 @@ pub type Unreleased = (
 	// Remove an old staking value.
 	crate::staking::RemoveMarchTIValue,
 	cumulus_pallet_xcmp_queue::migration::v6::MigrateV5ToV6<Runtime>,
+	cumulus_pallet_xcmp_queue::migration::v7::MigrateV6ToV7<Runtime>,
 	cumulus_pallet_parachain_system::migration::Migration<Runtime>,
 	// DAP V1->V2: seed `BudgetAllocation` and `LastIssuanceTimestamp`, credit a one-shot
 	// catch-up drip. Required when moving staking to non-minting mode (see SDK PR #11616).
@@ -195,17 +196,6 @@ pub type Unreleased = (
 		crate::dynamic_params::staking_election::MaxEraDuration,
 	>,
 	MigrateBountyAccountAssets,
-	// Creates the PGAS asset under the pallet-derived admin account. `pallet-pgas` cannot mint
-	// until it exists.
-	//
-	// `NextAssetId` rejects a requested id while it is `Some` and does not match that value. The
-	// wrapper takes the value before creation and restores it immediately after. The take and put
-	// are atomic within this upgrade block, and a fresh chain with no value round-trips as `None`.
-	// The guard is the only obstacle to this fixed-id creation.
-	//
-	// Once the SDK pin includes <https://github.com/paritytech/polkadot-sdk/pull/12378>, replace
-	// this wrapper with a bounded allocator such as the `ReservedFloorAllocator` sketch from the
-	// review: it must reserve ids greater than or equal to `PGAS_ASSET_ID` by rule, not distance.
 	CreatePgasAssetWithSuspendedAssetIds,
 );
 
@@ -247,20 +237,8 @@ mod multiblock_migrations {
 		>,
 		// Not added: we do it with a manual TX
 		//pallet_revive::migrations::v3::Migration<Runtime>,
-		//
 		// Mandatory companion to `pallet_revive::Config::Deposit` becoming
-		// `PGasDeposit` (see `lib.rs`). It records every existing code-upload deposit in
-		// `NativeDepositOf` and converts each contract's native `StorageDepositReserve` hold into
-		// PGAS. Without it, `refund_on_hold` finds no `NativeDepositOf` credit and no PGAS on hold
-		// for contracts deployed before the switch, so `settle_pgas_refund` caps the refund at
-		// zero: partial storage-deposit refunds would silently return nothing and leave the
-		// native hold stuck. Its phases 1 and 2 are no-ops unless `Deposit` supports PGAS, so it
-		// must not be added before that switch, and both must ship together.
-		//
-		// The `version_from: 3` in its `MigrationId` is only part of the identifier —
-		// `pallet-migrations` gates on whether that id is already in `Historic`, not on a version
-		// chain — so this runs even though revive's v3 MBM above was skipped in favour of a manual
-		// transaction.
+		// `PGasDeposit`.
 		pallet_revive::migrations::v4::Migration<Runtime>,
 	);
 
