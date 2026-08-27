@@ -76,7 +76,7 @@ Expected result:
 warning: asset-hub-polkadot-runtime@1.0.0: You are building WASM runtime using `wasm32-unknown-unknown` target...
 warning: people-polkadot-runtime@1.0.0: You are building WASM runtime using `wasm32-unknown-unknown` target...
     Finished `release` profile [optimized] target(s) in <time>
-Built Asset Hub and People candidate runtimes at spec_version 2003003
+Built Asset Hub and People candidate runtimes at spec_version 2004000
 ```
 
 The target warnings are not failures. The final `Built` line and exit status zero are required.
@@ -129,7 +129,7 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The 2026-08-26 fresh capture took 1 hour 8 minutes 25 seconds. Capture time depends on public peer
+The 2026-08-27 fresh capture took 1 hour 7 minutes 54 seconds. Capture time depends on public peer
 availability and can vary substantially.
 
 ## 5. Confirm the capture files
@@ -145,10 +145,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 19876878,
-  "para_1004_start_block": 8984982,
-  "para_1010_start_block": 1526672,
-  "rc_start_block": 32712267
+  "para_1000_start_block": 19931859,
+  "para_1004_start_block": 9043172,
+  "para_1010_start_block": 1547416,
+  "rc_start_block": 32733261
 }
 ```
 
@@ -190,7 +190,7 @@ Block #<relay-block-3>
 network is up and running...
 ```
 
-The 2026-08-26 fresh run took 49 seconds from `make spawn` to the ready message with the explicit
+The 2026-08-27 fresh run took 49 seconds from `make spawn` to the ready message with the explicit
 runtime log filters enabled.
 
 Leave Terminal 1 open. Continue in Terminal 2.
@@ -302,25 +302,25 @@ Expected Asset Hub sample:
 ```text
 ./scripts/upgrade.sh
 Finished `release` profile [optimized] target(s) in <time>
-submitting unsigned System.apply_authorized_upgrade: spec 2003002 -> 2003003
+submitting unsigned System.apply_authorized_upgrade: spec 2003002 -> 2004000
 upgrade extrinsic finalized successfully
 waiting for code enactment (current spec 2003002)
 ... repeated while the upgrade is pending ...
-waiting for code enactment (current spec 2003003)
-Asset Hub code is active at spec 2003003; waiting for multi-block migrations
+waiting for code enactment (current spec 2004000)
+Asset Hub code is active at spec 2004000; waiting for multi-block migrations
 ... repeated while migrations run ...
-Asset Hub upgraded to 2003003; PGAS exists, NextAssetId is preserved, Revive v4 is historic, and no Individuality subscription exists before People upgrades
+Asset Hub upgraded to 2004000; PGAS exists, NextAssetId is preserved, Revive v4 is historic, and no Individuality subscription exists before People upgrades
 ```
 
 Expected People sample:
 
 ```text
-submitting unsigned System.apply_authorized_upgrade: spec 2003002 -> 2003003
+submitting unsigned System.apply_authorized_upgrade: spec 2003002 -> 2004000
 upgrade extrinsic finalized successfully
 waiting for code enactment (current spec 2003002)
 ... repeated while the upgrade is pending ...
-waiting for code enactment (current spec 2003003)
-People upgraded to 2003003; Individuality pallets are present in live metadata
+waiting for code enactment (current spec 2004000)
+People upgraded to 2004000; the current Individuality pallet set is present in live metadata
 waiting for Individuality XCM (subscriber=true, pending=true, subscription=false, exponent=false)
 waiting for Individuality XCM (subscriber=true, pending=false, subscription=false, exponent=false)
 ... repeated while the XCM completes ...
@@ -330,6 +330,18 @@ Asset Hub and People runtime upgrades completed in the required order.
 
 Do not interrupt repeated waiting messages. The client checks the state every six seconds. Its
 default timeout is 1,200 seconds for each upgrade invocation.
+
+Normal runs must leave `ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES` unset. If the exact runtime
+upgrades have already activated but a later harness-only assertion fails, fix and validate that
+assertion first. Only then may the same run resume its post-activation checks explicitly:
+
+```sh
+ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1 CARGO_BUILD_JOBS=2 make upgrade
+```
+
+This recovery control accepts only the exact configured candidate code at the exact expected
+`spec_version`. It does not resubmit either upgrade. Without the variable, the client rejects an
+already-active candidate.
 
 ## 11. Verify the final state
 
@@ -343,8 +355,8 @@ Expected complete result:
 
 ```text
 relay: runtime unchanged at 2003002
-asset-hub: candidate runtime 2003003 active
-people: candidate runtime 2003003 active
+asset-hub: candidate runtime 2004000 active
+people: candidate runtime 2004000 active
 bulletin: runtime unchanged at 2002001
 Observing all four chains for 900 seconds after the upgrades...
 post-upgrade +60s: relay <before> -> <after>, asset-hub <before> -> <after>, people <before> -> <after>, bulletin <before> -> <after>
@@ -368,7 +380,7 @@ make inspect-runtime-logs
 ```
 
 The output must contain the runtime-upgrade and migration assessment on both collators. In the
-latest 2026-08-26 run it included XcmpQueue migration from version 6 to 7 on both chains, `PGAS
+latest 2026-08-27 run it included XcmpQueue migration from version 6 to 7 on both chains, `PGAS
 asset created` on Asset Hub, `lite people collection created` on People, and a successful notifier
 `send_init_page` submission, together with FRAME migration-assessment lines for the new pallets.
 The independent state check also proved that the People initialization XCM activated the Asset Hub
@@ -383,28 +395,28 @@ The omni-node can also emit recurring `sub-authority-discovery` messages saying 
 that same node/runtime-API compatibility noise before and after the upgrades while all state and
 block-production checks passed; do not confuse it with a failed runtime migration.
 
-### Recorded 2026-08-26 final result
+### Recorded 2026-08-27 final result
 
-The full default 900-second command passed on its first run and produced this aggregate
-advancement:
+After correcting the stale removed-pallet assertion and completing the explicit recovery checks,
+the full default 900-second command passed and produced this aggregate advancement:
 
 ```text
-relay: advanced 32712376 -> 32712526
-asset-hub: advanced 19877180 -> 19877630
-people: advanced 8985284 -> 8985734
-bulletin: advanced 1526779 -> 1526929
+relay: advanced 32733400 -> 32733550
+asset-hub: advanced 19932245 -> 19932695
+people: advanced 9043561 -> 9044011
+bulletin: advanced 1547551 -> 1547701
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774` and People
-`7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc`.
+`61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938` and People
+`4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff`.
 
 The fresh capture snapshot hashes were Relay
-`1b79a9750adaa8df12b8b90e6a85d436a2c35ca7df42d579c519364b9335697b`, Asset Hub
-`ac0fe88cf201b7d6d7f7da49dcf3cd67b63a39d7c89f59761178621325ca5530`, People
-`a8f907ca7da430d0c3e1b2ded1e8cfb249d0b0de53ef15ca5881c2589be726ef`, and Bulletin
-`787743ba15eb3273ecdf5688c6ff642f36c5126287351c6477a867ed3c9fae79`.
+`36fb53c28ff62f0208fb253191ffc7e846078187fbbd167cb1cd984168e1577b`, Asset Hub
+`963c9ff1d5f5c1ac4ca304f819f7ff73ddf158caa980ee410b99746e481ed35c`, People
+`48ba375dd3cb1ebb1651752061bce08b8372e4633a0b3198b07fa8212c433ae9`, and Bulletin
+`2e67ed06e02e3dbdca5ceab9ae3d5716590210f75a4963262b9c1a86d346888d`.
 
 ## 12. Stop the network
 

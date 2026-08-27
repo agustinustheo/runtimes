@@ -55,7 +55,7 @@ This comparison proves that the local boundary came from the configured live cha
 
 WASM is the WebAssembly runtime file that the chain executes.
 
-Both candidates must have runtime version `2003003`. The captured production versions must be
+Both candidates must have runtime version `2004000`. The captured production versions must be
 `2003002`.
 
 ### 2. Capture fresh live state
@@ -119,7 +119,7 @@ The client then submits the People upgrade. It waits for the People-to-Asset-Hub
 
 The client checks these Asset Hub results:
 
-- runtime version `2003003` is active
+- runtime version `2004000` is active
 - the exact candidate WASM is active
 - PGAS exists
 - `Assets.NextAssetId` did not change
@@ -128,7 +128,7 @@ The client checks these Asset Hub results:
 
 The client checks these People results:
 
-- runtime version `2003003` is active
+- runtime version `2004000` is active
 - the Individuality pallets are present
 - the pending initialization is consumed
 - Asset Hub receives the XCM
@@ -161,30 +161,31 @@ Run `make stop` after all checks pass.
 Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
 file and tears down every node.
 
-## Recorded timing from the 2026-08-26 validated run
+## Recorded timing from the 2026-08-27 validated run
 
 The local timezone was UTC+7. Fresh candidates were built from PR #2 commit
-`f708917a0f9222646c8bcde569039be2392e0f89`, after merging the current PR #1233 through PR #1 into
+`565ec3f73103d9d2c2fe015a9b2035f8fda63674`, after merging the current PR #1233 through PR #1 into
 PR #2. Both artifact-reuse variables were explicitly unset and all four production chains were
 resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Fresh candidate build | About `14 min` with `CARGO_BUILD_JOBS=2` |
-| Fresh four-chain synchronization to `ready.json` | `1 h 8 min 25 s` |
+| Fresh candidate build | `4 min 8 s` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `1 h 7 min 54 s` |
 | Final spawn to ready marker | `49 s` |
-| Successful fork-boundary verification | `18 s` |
 | Pre-upgrade verification | `24 s` |
 | Runtime-log checkpoint | `<1 s` |
-| Ordered Asset Hub then People upgrade | `8 min 20 s`, including the one-time client build |
+| Ordered activation through the stale harness assertion | `6 min 41 s`, including the one-time client build |
+| Corrected explicit recovery check | `9 s` |
 | Configured post-upgrade verification | `15 min` plus command overhead |
 | Runtime-log extraction | About `1 s` |
-| Stop request to spawner exit | `1 min 19 s`, including stopped-state snapshots |
+| Stop request to spawner exit | `47 s`, including stopped-state snapshots |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
-and sampled all four chains every minute. The fresh production capture depended on public peer
-availability; Asset Hub was the largest and slowest capture at approximately one hour.
+and sampled all four chains every minute. Asset Hub was the largest and slowest capture at about 57
+minutes. The local node binaries exactly matched the official PreviewNet `v20260826.201435` macOS
+ARM64 artifacts and reported `1.24.2-weekly2026w34-eb220fa14e7`.
 
 ## Recorded boundaries
 
@@ -192,10 +193,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32712267` |
-| Asset Hub | `19876878` |
-| People | `8984982` |
-| Bulletin | `1526672` |
+| Relay | `32733261` |
+| Asset Hub | `19931859` |
+| People | `9043172` |
+| Bulletin | `1547416` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -209,12 +210,9 @@ The supplied terminal output proves these results:
 - Asset Hub and People started at runtime version `2003002`.
 - Both candidate authorizations were present.
 - All four chains advanced before the upgrades.
-- Asset Hub upgraded to `2003003`.
-- The Asset Hub PGAS and Revive checks passed.
-- People upgraded to `2003003`.
-- The Individuality pallets appeared in People metadata.
-- The People-to-Asset-Hub XCM completed.
-- Asset Hub activated the Individuality subscription.
+- Asset Hub upgraded to `2004000` and its PGAS, `NextAssetId`, and Revive checks passed.
+- People upgraded to `2004000` and exposed the current Individuality pallet set.
+- The People-to-Asset-Hub XCM completed and Asset Hub activated the subscription.
 - Relay remained at runtime version `2003002`.
 - Bulletin remained at runtime version `2002001`.
 - Asset Hub and People used the exact candidate runtime bytes.
@@ -222,50 +220,58 @@ The supplied terminal output proves these results:
 - All 15 one-minute samples showed all four chains producing blocks after the upgrades.
 - The post-checkpoint logs showed XcmpQueue migration from version 6 to 7 on both chains, Asset
   Hub's `PGAS asset created`, and People's `lite people collection created` automatic migration
-  hook. The notifier offchain worker also logged a successful `send_init_page` submission.
+  hook. The notifier whitelisted parachain `1000` and its offchain worker logged a successful
+  `send_init_page` submission.
 - The scoped logs contained recurring omni-node `AuthorityDiscoveryApi_authorities` compatibility
   noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
-The complete default 900-second command passed on its first run and included this final result:
+The first upgrade invocation activated both exact candidates but its subsequent metadata assertion
+failed because it still expected the removed `Game` pallet. The assertion was corrected to the
+current pallet set. The opt-in `ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1` recovery check then
+completed successfully without resubmitting either upgrade. The default remains strict and rejects
+already-active candidates.
+
+The complete default 900-second command then passed and included this final result:
 
 ```text
-relay: advanced 32712376 -> 32712526
-asset-hub: advanced 19877180 -> 19877630
-people: advanced 8985284 -> 8985734
-bulletin: advanced 1526779 -> 1526929
+relay: advanced 32733400 -> 32733550
+asset-hub: advanced 19932245 -> 19932695
+people: advanced 9043561 -> 9044011
+bulletin: advanced 1547551 -> 1547701
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ./scripts/stop.sh
 ```
 
-This output completes the final 900-second block-production check. The five fixed RPC ports and all
-30 dynamically allocated P2P and metrics ports had no listeners after the spawner exited, and every
-artifact-related process had stopped.
+This output completes the final 900-second block-production check. All 36 recorded RPC, P2P, and
+metrics ports had no listeners after the spawner exited, and every artifact-related process had
+stopped.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub: `71e96bd77e58708004bac379b4a7d39eb808882b12e6ada37a1f630dfb0b7774`
-- People: `7826a818db00b7128a9f53d821fb05f8c58b96ce102fbb23d0fdff136973c6bc`
+- Asset Hub: `61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938`
+- People: `4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff`
 
-The four non-empty snapshot artifacts were:
+The four non-empty, gzip-valid snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `332195774` | `1b79a9750adaa8df12b8b90e6a85d436a2c35ca7df42d579c519364b9335697b` |
-| Asset Hub | `2753618008` | `ac0fe88cf201b7d6d7f7da49dcf3cd67b63a39d7c89f59761178621325ca5530` |
-| People | `4857021` | `a8f907ca7da430d0c3e1b2ded1e8cfb249d0b0de53ef15ca5881c2589be726ef` |
-| Bulletin | `2590615` | `787743ba15eb3273ecdf5688c6ff642f36c5126287351c6477a867ed3c9fae79` |
+| Relay | `332102754` | `36fb53c28ff62f0208fb253191ffc7e846078187fbbd167cb1cd984168e1577b` |
+| Asset Hub | `2756488369` | `963c9ff1d5f5c1ac4ca304f819f7ff73ddf158caa980ee410b99746e481ed35c` |
+| People | `4854235` | `48ba375dd3cb1ebb1651752061bce08b8372e4633a0b3198b07fa8212c433ae9` |
+| Bulletin | `2590889` | `2e67ed06e02e3dbdca5ceab9ae3d5716590210f75a4963262b9c1a86d346888d` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260826-001`.
-It is intentionally untracked and was not pushed.
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-001`.
+It is intentionally untracked and was not pushed. The directory uses 27 GiB and 228 GiB remained
+free after clean shutdown.
 
 ## Warnings and normal waits
 
 The `wasm32-unknown-unknown` messages are build warnings. They did not fail this run.
 
 Repeated `waiting for code enactment` messages are normal. Do not interrupt the upgrade client
-while the current runtime version changes from `2003002` to `2003003`.
+while the current runtime version changes from `2003002` to `2004000`.
 
 Repeated Asset Hub database messages are also normal while the database becomes quiet. Continue
 only if the process still has peers or the downloaded byte count continues to increase.
@@ -277,7 +283,7 @@ Keep enough free space for the Rust build, captured snapshots, and spawned worki
 The retained artifact directory uses approximately 27 GiB after the latest run, including 23 GiB
 of stopped working databases. Start a cold clean run with at least 250 GiB free because temporary
 capture data, build products, and spawned working copies can coexist while the test is active. This
-fresh capture started with 263 GiB free and reported 232 GiB free after clean shutdown.
+fresh capture started with 253 GiB free and reported 228 GiB free after clean shutdown.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.

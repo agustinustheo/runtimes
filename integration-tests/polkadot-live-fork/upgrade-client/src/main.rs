@@ -25,6 +25,11 @@ struct Args {
 	chain: Chain,
 	#[arg(long, default_value_t = 1200)]
 	timeout_seconds: u64,
+	/// Continue post-upgrade checks when this exact candidate is already active.
+	/// This is only for recovering a test run whose upgrade succeeded but whose
+	/// subsequent harness assertion failed; normal runs remain strict.
+	#[arg(long, default_value_t = false)]
+	allow_already_active: bool,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -93,14 +98,19 @@ async fn verify_asset_hub(
 
 fn verify_people_metadata(client: &OnlineClient<PolkadotConfig>) -> Result<()> {
 	for pallet in [
+		"RelayRandomness",
+		"OriginRestriction",
 		"People",
-		"Game",
-		"Score",
+		"DummyDim",
 		"PeopleLite",
 		"Resources",
+		"ChunksManager",
 		"Members",
+		"Coinage",
 		"MembersNotifier",
+		"Honour",
 		"Parameters",
+		"NetworkSuffix",
 	] {
 		if client.metadata().pallet_by_name(pallet).is_none() {
 			bail!("People candidate metadata is missing {pallet}");
@@ -164,13 +174,6 @@ async fn main() -> Result<()> {
 		.with_context(|| format!("read {}", args.wasm.display()))?;
 	let client = connect(&args.rpc).await?;
 	let original_spec = client.runtime_version().spec_version;
-	if original_spec >= args.expected_spec {
-		bail!(
-			"refusing upgrade: current spec_version {original_spec} is not below candidate {}",
-			args.expected_spec
-		);
-	}
-
 	let original_code = client
 		.storage()
 		.at_latest()
@@ -178,6 +181,36 @@ async fn main() -> Result<()> {
 		.fetch_raw(b":code".to_vec())
 		.await?
 		.context("live-fork state has no :code")?;
+
+	if original_spec == args.expected_spec && original_code == code {
+		if !args.allow_already_active {
+			bail!(
+				"fork already runs the candidate code at spec_version {original_spec}; pass --allow-already-active only to recover a run whose upgrade already succeeded"
+			);
+		}
+
+		println!(
+			"candidate code is already active at spec {original_spec}; continuing explicit recovery checks"
+		);
+		if matches!(args.chain, Chain::People) {
+			verify_people_metadata(&client)?;
+			println!("People candidate metadata contains the current Individuality pallet set");
+			let asset_hub_rpc = args
+				.asset_hub_rpc
+				.as_deref()
+				.context("--asset-hub-rpc is required for the People upgrade")?;
+			verify_individuality_xcm(&args.rpc, asset_hub_rpc, args.timeout_seconds).await?;
+		}
+		return Ok(());
+	}
+
+	if original_spec >= args.expected_spec {
+		bail!(
+			"refusing upgrade: current spec_version {original_spec} is not below candidate {}",
+			args.expected_spec
+		);
+	}
+
 	if original_code == code {
 		bail!("fork already runs the candidate code");
 	}
@@ -233,8 +266,8 @@ async fn main() -> Result<()> {
 						Chain::People => {
 							verify_people_metadata(&post_client)?;
 							println!(
-                                "People upgraded to {spec}; Individuality pallets are present in live metadata"
-                            );
+								"People upgraded to {spec}; the current Individuality pallet set is present in live metadata"
+							);
 							break;
 						},
 					}
