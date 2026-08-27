@@ -138,7 +138,7 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The latest 2026-08-27 fresh capture took 47 minutes 37 seconds. Capture time depends on public peer
+The latest 2026-08-27 fresh capture took 43 minutes 29 seconds. Capture time depends on public peer
 availability and can vary substantially.
 
 ## 5. Confirm the capture files
@@ -154,10 +154,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 19936574,
-  "para_1004_start_block": 9047812,
-  "para_1010_start_block": 1549114,
-  "rc_start_block": 32734803
+  "para_1000_start_block": 19939360,
+  "para_1004_start_block": 9050572,
+  "para_1010_start_block": 1550125,
+  "rc_start_block": 32735774
 }
 ```
 
@@ -199,7 +199,7 @@ Block #<relay-block-3>
 network is up and running...
 ```
 
-The 2026-08-27 fresh run took 49 seconds from `make spawn` to the ready message with the explicit
+The 2026-08-27 fresh run took 46 seconds from `make spawn` to the ready message with the explicit
 runtime log filters enabled.
 
 Leave Terminal 1 open. Continue in Terminal 2.
@@ -410,27 +410,27 @@ The normal strict upgrade path passed with recovery mode unset. The full default
 then passed and produced this aggregate advancement:
 
 ```text
-relay: advanced 32734908 -> 32735058
-asset-hub: advanced 19936859 -> 19937309
-people: advanced 9048100 -> 9048550
-bulletin: advanced 1549215 -> 1549365
+relay: advanced 32735865 -> 32736015
+asset-hub: advanced 19939610 -> 19940060
+people: advanced 9050810 -> 9051260
+bulletin: advanced 1550214 -> 1550364
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82` and People
+`060a9ebf7805fbcb46e130b7678b243221e1f05f67e9c75897c4d0abfce90ae7` and People
 `8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963`.
 
 The fresh capture snapshot hashes were Relay
-`4346875011861d10e96494014889aab1eb77b675ce936e96d84c4ffd725f7623`, Asset Hub
-`2cd41db020daa0a1e5b77ac1ae470c6b06212bbca1735ce0eb39e718c9ad05cf`, People
-`b879393984684003d7775c309ed884e9ea30cdc29c2ec71e433a6b450ec4784b`, and Bulletin
-`fee3dd27fb6f08384ace00d6b0024f7ee9f99c80fcbced1a83fef8cdb851c7be`.
+`32f3a6ca85674fcf0bb943743552b9431d6c2c67d53d6084f1112e2adac5ada7`, Asset Hub
+`a25728299e58e45a20ab4222627ff2c75c9c63c47c5447cb7fe5cb9a2f6d50b4`, People
+`312fa6bae82385736beaa2b75cc532f3a6e02dae7e671c297b6741ac6050cbef`, and Bulletin
+`67a1ef82b9dcf43d39ef1589c0d4c6da553bd0840dbda96ed46f79aa15b71d33`.
 
 On macOS Bash 3.2, an initial shell invocation stopped before launching the upgrade client because
 an empty optional-argument array was treated as unbound under `set -u`. The script now uses a
-Bash-3.2-safe scalar. No upgrade extrinsic had been submitted; the subsequent complete strict run
-exited zero in 7 minutes 2 seconds.
+Bash-3.2-safe scalar. In the latest run, the first strict invocation exited zero in 7 minutes 8
+seconds with recovery mode unset.
 
 ## 12. Stop the network
 

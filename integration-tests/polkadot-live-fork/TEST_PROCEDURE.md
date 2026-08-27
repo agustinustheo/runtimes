@@ -164,21 +164,20 @@ file and tears down every node.
 ## Recorded timing from the 2026-08-27 validated run
 
 The local timezone was UTC+7. Fresh candidates were built from PR #2 commit
-`807278a74445235601c38c3b96a1643f177d056b`, after merging the latest PR #1233 through PR #1 into
+`c21994ae2c17c86c9878e558e824f8f3d512db18`, after merging the latest PR #1233 through PR #1 into
 PR #2. Both artifact-reuse variables were explicitly unset and all four production chains were
 resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Fresh candidate build | `4 min 19 s` with `CARGO_BUILD_JOBS=2` |
-| Fresh four-chain synchronization to `ready.json` | `47 min 37 s` |
-| Final spawn to ready marker | `49 s` |
-| Pre-upgrade verification | `24 s` |
-| Runtime-log checkpoint | `<1 s` |
-| Normal strict Asset Hub then People upgrade | `7 min 2 s` |
+| Full-clean candidate build | `13 min 57 s` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `43 min 29 s` |
+| Final spawn to ready marker | `46 s` |
+| Fork verification, pre-upgrade verification, and runtime-log checkpoint | `40 s`, including the `24 s` block-production observation |
+| Normal strict Asset Hub then People upgrade | `7 min 8 s` |
 | Configured post-upgrade verification | `15 min` plus command overhead |
 | Runtime-log extraction | About `1 s` |
-| Stop request to spawner exit | `1 min 8 s`, including stopped-state snapshots |
+| Stop request to spawner exit | `1 min 10 s`, including stopped-state snapshots |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
@@ -192,10 +191,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32734803` |
-| Asset Hub | `19936574` |
-| People | `9047812` |
-| Bulletin | `1549114` |
+| Relay | `32735774` |
+| Asset Hub | `19939360` |
+| People | `9050572` |
+| Bulletin | `1550125` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -225,20 +224,18 @@ The supplied terminal output proves these results:
   noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
-The first shell invocation stopped before launching the upgrade client because macOS Bash 3.2
-treated an empty optional-argument array as unbound under `set -u`. No extrinsic had been submitted.
-The script was changed to use a Bash-3.2-safe optional scalar. The subsequent full upgrade ran on
-the normal strict path with recovery mode unset and exited zero.
+The full upgrade ran on the normal strict path with recovery mode unset and exited zero on its
+first invocation. The Bash-3.2-safe optional recovery scalar introduced by the preceding validation
+remained in place.
 
 The complete default 900-second command then passed and included this final result:
 
 ```text
-relay: advanced 32734908 -> 32735058
-asset-hub: advanced 19936859 -> 19937309
-people: advanced 9048100 -> 9048550
-bulletin: advanced 1549215 -> 1549365
+relay: advanced 32735865 -> 32736015
+asset-hub: advanced 19939610 -> 19940060
+people: advanced 9050810 -> 9051260
+bulletin: advanced 1550214 -> 1550364
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
-./scripts/stop.sh
 ```
 
 This output completes the final 900-second block-production check. All 36 recorded RPC, P2P, and
@@ -247,21 +244,21 @@ stopped.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub: `9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82`
+- Asset Hub: `060a9ebf7805fbcb46e130b7678b243221e1f05f67e9c75897c4d0abfce90ae7`
 - People: `8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963`
 
 The four non-empty, gzip-valid snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `327533298` | `4346875011861d10e96494014889aab1eb77b675ce936e96d84c4ffd725f7623` |
-| Asset Hub | `2755336406` | `2cd41db020daa0a1e5b77ac1ae470c6b06212bbca1735ce0eb39e718c9ad05cf` |
-| People | `4860689` | `b879393984684003d7775c309ed884e9ea30cdc29c2ec71e433a6b450ec4784b` |
-| Bulletin | `2591561` | `fee3dd27fb6f08384ace00d6b0024f7ee9f99c80fcbced1a83fef8cdb851c7be` |
+| Relay | `332903965` | `32f3a6ca85674fcf0bb943743552b9431d6c2c67d53d6084f1112e2adac5ada7` |
+| Asset Hub | `2757054990` | `a25728299e58e45a20ab4222627ff2c75c9c63c47c5447cb7fe5cb9a2f6d50b4` |
+| People | `4861819` | `312fa6bae82385736beaa2b75cc532f3a6e02dae7e671c297b6741ac6050cbef` |
+| Bulletin | `2590105` | `67a1ef82b9dcf43d39ef1589c0d4c6da553bd0840dbda96ed46f79aa15b71d33` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-002`.
-It is intentionally untracked and was not pushed. The directory uses 27 GiB and 221 GiB remained
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-003`.
+It is intentionally untracked and was not pushed. The directory uses 27 GiB and 224 GiB remained
 free after clean shutdown.
 
 ## Warnings and normal waits
@@ -284,7 +281,8 @@ Keep enough free space for the Rust build, captured snapshots, and spawned worki
 The retained artifact directory uses approximately 27 GiB after the latest run, including 23 GiB
 of stopped working databases. Start a cold clean run with at least 250 GiB free because temporary
 capture data, build products, and spawned working copies can coexist while the test is active. This
-fresh capture started with 252 GiB free and reported 221 GiB free after clean shutdown.
+full repository target clean removed 10.2 GiB before the candidates were rebuilt. Preflight
+reported 249 GiB free after that build, and 224 GiB remained after clean shutdown.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.
