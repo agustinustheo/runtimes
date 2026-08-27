@@ -4,7 +4,7 @@ Changelog for the runtimes governed by the Polkadot Fellowship.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [2.4.0] 25.08.2026
 
 ### Added
 
@@ -12,25 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Asset Hub Polkadot: add support for multiple independent PSMs ([#1252](https://github.com/polkadot-fellows/runtimes/pull/1252), integrates [paritytech/polkadot-sdk#12952](https://github.com/paritytech/polkadot-sdk/pull/12952)).
 - All system parachains: add the `cumulus_pallet_parachain_system::Config::SchedulingSignatureVerifier` associated type (set to `()`) and implement `RelayParentOffsetApi` v2 (`max_claim_queue_offset`); preparation for candidate-descriptor v3, with V3 scheduling left disabled ([#1223](https://github.com/polkadot-fellows/runtimes/pull/1223), integrates [paritytech/polkadot-sdk#10742](https://github.com/paritytech/polkadot-sdk/pull/10742)).
 
-- People Polkadot: align the Individuality SDK dependency pin with `individuality-community` `d5b846…` (stable2606), add the on-chain `NetworkSuffix` pallet, `pallet-people-airdrops`, and fee-backed lite-person registration. The new product-context derivation uses the Polkadot suffix; aliases made with the prior static contexts on zombie-bite forks no longer resolve.
-- Asset Hub Polkadot: align the Individuality SDK dependency pin with `individuality-community` `d5b846…` (stable2606), add the on-chain `NetworkSuffix` pallet, and adopt the alias-account stale-mapping sweep/offchain worker rework. Collators must run with offchain workers enabled.
-
-- People Polkadot: deploy the Individuality SDK personhood stack from [`paritytech/individuality`](https://github.com/paritytech/individuality), ported from that repository's `next-people-paseo` reference runtime and configured in the new `individuality` module.
-  - Ring-membership infrastructure: `pallet-chunks-manager` (the Bandersnatch ring-VRF SRS), `pallet-members` (member collections, ring roots, proof verification) and `pallet-members-notifier` (publishes ring roots to subscribing parachains over XCM).
-  - Personhood: `pallet-people` (the registry, `PersonalIdentity`/`PersonalAlias` origins), `pallet-people-lite` (device-attestation personhood) and `pallet-dummy-dim` (governance-driven recognition).
-  - Applications: `pallet-game` + `pallet-score` (the in-person meetup game), `pallet-airdrop` (prizes), `pallet-honour` (personhood-weighted voting on calls), `pallet-resources` (per-person off-chain resource rationing) and `pallet-coinage` (stablecoin-backed bearer coins held by ring aliases).
-  - Support: `pallet-origin-restriction` rate-limits the anonymous origins the above produce, `pallet-relay-randomness` surfaces relay chain randomness, and `pallet-verify-signature` enables the general transactions those flows are built on.
-  - The Individuality origin modifiers and `RestrictOrigin` are added as a **new transaction extension version 1** (`TxExtensionV1`). Version 0 is unchanged, so existing signers keep working and `transaction_version` does not move; only general (extrinsic format v5) transactions can select version 1.
-  - `indiv-pallet-proof-of-ink`, `indiv-pallet-mob-rule` and `indiv-pallet-storage-initialization` are deliberately **not** deployed. `pallet-mob-rule`'s cases can only be opened by a pallet judging statements through its `StatementOracle` implementation, which is `pallet-proof-of-ink` in the reference runtime, so without it the juror pallet would be inert. `pallet-storage-initialization` is a development-chain bootstrapper that funds hard-coded accounts.
-- Asset Hub Polkadot: deploy the consumer side of the Individuality SDK, ported from that repository's `next-asset-hub-paseo` reference runtime and configured in the new `individuality` module.
-  - `pallet-members-subscriber` mirrors People Polkadot's ring roots over XCM, so ring-VRF personhood proofs verify locally.
-  - `pallet-alias-accounts` binds accounts to context-scoped anonymous aliases, and the `PersonhoodCheck` precompile exposes that check to `pallet-revive` contracts.
-  - `pallet-pgas` lets a proven person claim PGAS (a new non-transferable allowance asset, id `2_000_000_000`); `pallet-pgas-allowance` lets PGAS pay the fees of contract calls, and `pallet_revive::PGasDeposit` makes contract storage deposits PGAS-denominated, so a proven person needs no DOT to use contracts. `pallet-assets-freezer` and `pallet-assets-holder` are added on the `Assets` (trust-backed) instance to support this, and `pallet_revive::migrations::v4::Migration` converts the storage deposits of contracts that already exist — it must ship in the same upgrade.
-  - `pallet-dotns-gateway` is the personhood-gated front door to the dotNS name registry, with `pallet-origin-restriction` rate-limiting the anonymous origins it produces.
-  - The Individuality origin modifiers, `RestrictOrigin` and the `ChargePGAS` payment wrapper are added as a **new transaction extension version 1** (`TxExtensionV1`). Version 0 is unchanged — Ethereum transactions and legacy signed transactions keep using it — so `transaction_version` does not move.
-- People Polkadot: make Individuality statement-store and Bulletin long-term-storage limits, including the Bulletin destination and `pallet-transaction-storage` target index, governance-adjustable through `pallet-parameters` (Fellowship or root) ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
-- Asset Hub Polkadot: make Individuality PGAS claim economics, alias-account windows, and dotNS gateway limits governance-adjustable through `pallet-parameters` (Fellowship or root) ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
-- Asset Hub Polkadot: add the `technical_maintenance` OpenGov track for operational settings such as quotas, allowances, limits and fees, and the `prosperity_admin` track for guarding the Prosperity monetary mechanisms (PSM, coinage) ([#1236](https://github.com/polkadot-fellows/runtimes/pull/1236)).
+- People Polkadot: add the Individuality pallets: `pallet-chunks-manager`, `pallet-coinage`, `pallet-dummy-dim`, `pallet-honour`, `pallet-members`, `pallet-members-notifier`, `pallet-network-suffix`, `pallet-origin-restriction`, `pallet-parameters`, `pallet-people`, `pallet-people-lite`, `pallet-relay-randomness`, `pallet-resources`, and `pallet-verify-signature` ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
+- Asset Hub Polkadot: add the Individuality pallets: `pallet-alias-accounts`, `pallet-assets-freezer`, `pallet-assets-holder`, `pallet-dotns-gateway`, `pallet-members-subscriber`, `pallet-network-suffix`, `pallet-origin-restriction`, `pallet-pgas`, and `pallet-pgas-allowance` ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
 
 ### Changed
 
@@ -38,19 +21,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Update all runtimes to `polkadot-sdk` `stable2606-1` ([#1223](https://github.com/polkadot-fellows/runtimes/pull/1223)).
 - All system parachains: run the `cumulus_pallet_xcmp_queue` storage migration to v7 (outbound channel status now stores the queued byte size, avoiding per-page checks) ([#1223](https://github.com/polkadot-fellows/runtimes/pull/1223), integrates [paritytech/polkadot-sdk#12176](https://github.com/paritytech/polkadot-sdk/pull/12176)).
 
-- People Polkadot: raise the block weight limit to the `async_backing` constants (2s of ref time, 85% normal dispatch ratio) from `parachains_common`'s pre-async-backing pair (0.5s, 75%). This chain already authors a block every 2s under `elastic_scaling` consensus. This matches Asset Hub Polkadot's block-weight configuration.
+- People Polkadot: raise the block weight limit to the `async_backing` constants (2s of ref time, 85% normal dispatch ratio) from `parachains_common`'s pre-async-backing pair (0.5s, 75%). This chain already authors a block every 2s under `elastic_scaling` consensus. It is now closer to Asset Hub Polkadot config.
 
 ### Fixed
 
-- Relay chains and most system parachains: fix `pallet-xcm-benchmarks` worst-case setups (`Transact` batching, `alias_origin`, multi-asset deposits) that were underpricing XCM weights.
-
 - Asset Hub Polkadot & Kusama: fix `pallet-remote-proxy` dropping the newest relay storage root when multiple parachain blocks share one relay parent. `on_validation_data` now skips storing duplicate relay blocks, which used to fill the bounded `BlockToRoot` vector with copies too young to prune and silently drop the newest root, so remote-proxy proofs anchored at recent relay blocks no longer fail with `UnknownProofAnchorBlock` ([#1230](https://github.com/polkadot-fellows/runtimes/issues/1230)).
-- Asset Hub Polkadot: suspend `NextAssetId` while the PGAS migration creates its fixed-id asset, so `force_create` accepts it and the auto-increment sequence resumes unchanged.
 - Polkadot & Kusama system parachains that pass aliasers to their XCM barrier: stop passing the storage-reading `pallet_xcm::AuthorizedAliasers` filter to `AllowExplicitUnpaidExecutionFrom`. `TrustedAliasers` is now split into a computation-only `CheapTrustedAliasers` (used by the barrier) and `(CheapTrustedAliasers, AuthorizedAliasers<Runtime>)` (still `xcm_executor::Config::Aliasers`); aliases that only `AuthorizedAliasers` permits must now buy execution via the paid barrier instead of using `UnpaidExecution` ([#1237](https://github.com/polkadot-fellows/runtimes/pull/1237)).
+- Relay chains and most system parachains: fix `pallet-xcm-benchmarks` worst-case setups (`Transact` batching, `alias_origin`, multi-asset deposits) that were underpricing XCM weights.
 
 ### Removed
 
-- People Polkadot: remove the unused `pallet-nfts` instance.
 - All runtimes: remove `pallet_xcm::migration::MigrateToLatestXcmVersion`, which ran on every runtime upgrade as the `Permanent` migration. Stored XCM data is already at the current `XCM_VERSION`, so re-running it on each upgrade is pure overhead. The now-empty `Permanent` alias is gone and `SingleBlockMigrations` is just `Unreleased`; a future `XCM_VERSION` bump must add this migration to that release's `Unreleased` list ([#1244](https://github.com/polkadot-fellows/runtimes/pull/1244)).
 
 ## [2.3.2] 23.07.2026

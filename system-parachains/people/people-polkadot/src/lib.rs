@@ -32,6 +32,7 @@ mod weights;
 pub mod xcm_config;
 
 use alloc::{borrow::Cow, vec, vec::Vec};
+use assets_common::local_and_foreign_assets::TargetFromLeft;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, RelaychainDataProvider};
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
@@ -41,12 +42,16 @@ use frame_support::{
 	genesis_builder_helper::{build_state, get_preset},
 	parameter_types,
 	traits::{
-		tokens::imbalance::ResolveTo, ConstBool, ConstU32, ConstU64, ConstU8, EitherOf,
+		fungible,
+		tokens::imbalance::{ResolveAssetTo, ResolveTo},
+		AsEnsureOriginWithArg, ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, EitherOf,
 		EitherOfDiverse, Everything, InstanceFilter, TransformOrigin,
 	},
 	weights::{ConstantMultiplier, Weight},
 	PalletId,
 };
+#[cfg(not(feature = "runtime-benchmarks"))]
+use frame_support::traits::NeverEnsureOrigin;
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
@@ -91,7 +96,7 @@ use system_parachains_constants::{
 };
 use weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
 use xcm::{
-	latest::prelude::{AssetId, BodyId},
+	latest::prelude::{AssetId, BodyId, Location},
 	Version as XcmVersion, VersionedAsset, VersionedAssetId, VersionedAssets, VersionedLocation,
 	VersionedXcm,
 };
@@ -116,12 +121,7 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
 
-/// The TransactionExtension to the basic transaction logic, version 0.
-///
-/// **Frozen.** This is byte-for-byte the pipeline this runtime had before the Individuality
-/// deployment, and it must stay that way: legacy signed (extrinsic format v4) transactions can only
-/// ever use version 0, and every already-built signer targets it. The Individuality extensions live
-/// in [`TxExtensionV1`] instead, so nothing here changes and `transaction_version` does not move.
+/// The TransactionExtension pipeline version 0. **Frozen.**
 pub type TxExtensionV0 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	Runtime,
 	(
@@ -138,22 +138,7 @@ pub type TxExtensionV0 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	),
 >;
 
-/// The TransactionExtension to the basic transaction logic, version 1: version 0 plus the
-/// Individuality pipeline.
-///
-/// Only *general* (extrinsic format v5) transactions can select this version, by encoding `1` as
-/// their extension version. That is what the Individuality flows use anyway, since they carry no
-/// account signature in the extrinsic envelope.
-///
-/// The leading sub-tuple holds the *origin modifiers*: extensions that replace the transaction's
-/// origin with one authenticated by something other than an account signature — a ring-VRF
-/// membership proof, a referral ticket, a coin, an off-chain signature. They must all run before
-/// `CheckNonce` (which only applies to signed origins) and before `ChargeAssetTxPayment`, which
-/// sees a non-signed origin and returns `NoCharge` so the pallet that produced the origin can
-/// settle the fee its own way.
-///
-/// Because those origins pay no account fee, `RestrictOrigin` follows immediately after to charge
-/// them against a per-origin allowance instead.
+/// The TransactionExtension pipeline version. Latest.
 pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	Runtime,
 	(
@@ -162,8 +147,6 @@ pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 			(),
 			pallet_verify_signature::VerifySignature<Runtime>,
 			indiv_pallet_people::extension::AsPerson<Runtime>,
-			indiv_pallet_score::ScoreAsParticipant<Runtime>,
-			indiv_pallet_game::GameAsInvited<Runtime>,
 			indiv_pallet_people_lite::extension::PeopleLiteAuth<Runtime>,
 			indiv_pallet_members::extension::AsMember<Runtime>,
 			indiv_pallet_coinage::extension::AsCoinage<Runtime>,
@@ -185,7 +168,7 @@ pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 	),
 >;
 
-/// The transaction extension pipelines a general transaction may select other than version 0.
+/// The transaction extension pipelines with versions other than 0.
 pub type TxExtensionOtherVersions = PipelineAtVers<1, TxExtensionV1>;
 
 /// Unchecked extrinsic type as expected by this runtime.
@@ -201,14 +184,27 @@ pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<
 pub mod migrations {
 	use super::*;
 
+	pub mod chunk_page_hashes;
+
 	/// Unreleased migrations. Add new ones here:
 	pub type Unreleased = (
 		cumulus_pallet_xcmp_queue::migration::v6::MigrateV5ToV6<Runtime>,
 		cumulus_pallet_xcmp_queue::migration::v7::MigrateV6ToV7<Runtime>,
 		cumulus_pallet_parachain_system::migration::Migration<Runtime>,
+		// Must precede the collection migrations
+		chunk_page_hashes::InitializeChunkPageHashes,
 		indiv_pallet_people::migration::CreatePeopleCollection<Runtime>,
 		indiv_pallet_people_lite::migration::CreateLitePeopleCollection<Runtime>,
+		// Single-use: whitelist the Asset Hub as a subscriber. Remove once live.
+		// It overwrites unconditionally.
+		SeedAssetHubSubscriptionWhitelist,
 	);
+
+	pub type SeedAssetHubSubscriptionWhitelist =
+		indiv_pallet_members_notifier::migration::SeedSubscriptionWhitelist<
+			Runtime,
+			individuality::AssetHubSubscriptionWhitelist,
+		>;
 
 	/// All migrations that will run on the next runtime upgrade.
 	pub type SingleBlockMigrations = Unreleased;
@@ -237,11 +233,9 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: Cow::Borrowed("people-polkadot"),
 	impl_name: Cow::Borrowed("people-polkadot"),
 	authoring_version: 1,
-	spec_version: 2_003_003,
+	spec_version: 2_004_000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
-	// Not bumped: the Individuality pipeline is a *new* extension version (`TxExtensionV1`), and
-	// version 0 is unchanged, so transactions built against the current metadata stay valid.
 	transaction_version: 0,
 	system_version: 1,
 };
@@ -370,8 +364,6 @@ parameter_types! {
 impl cumulus_pallet_parachain_system::Config for Runtime {
 	type SchedulingSignatureVerifier = ();
 	type RuntimeEvent = RuntimeEvent;
-	// `pallet-relay-randomness` snapshots the relay chain randomness out of the relay state proof
-	// every time a new relay parent is validated.
 	type OnSystemEvent = RelayRandomness;
 	type SelfParaId = parachain_info::Pallet<Runtime>;
 	type OutboundXcmpMessageSource = XcmpQueue;
@@ -715,27 +707,112 @@ impl pallet_verify_signature::BenchmarkHelper<Signature, AccountId>
 	}
 }
 
-/// Lets a *general* transaction carry its signature inside [`TxExtensionV1`] rather than in the
-/// extrinsic envelope. The Individuality origin modifiers are built on general transactions, so
-/// this is what authenticates the signer they read.
 impl pallet_verify_signature::Config for Runtime {
 	type Signature = Signature;
 	type AccountIdentifier = sp_runtime::MultiSigner;
-	// TODO: generate a local weights file for this pallet, like every other pallet in this runtime.
-	// It is already listed in `benches!`, but the weights come from upstream's generic Substrate
-	// measurements rather than from this runtime's own benchmark run.
-	type WeightInfo = pallet_verify_signature::weights::SubstrateWeight<Runtime>;
+	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = VerifySignatureBenchmarkHelper;
 }
 
+pub type PoolAssetsInstance = pallet_assets::Instance1;
+impl pallet_assets::Config<PoolAssetsInstance> for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Balance = Balance;
+	type RemoveItemsLimit = ConstU32<1000>;
+	type AssetId = u32;
+	type AssetIdParameter = u32;
+	type ReserveData = ();
+	type Currency = Balances;
+	#[cfg(feature = "runtime-benchmarks")]
+	type CreateOrigin = AsEnsureOriginWithArg<
+		frame_system::EnsureSignedBy<AssetConversionOrigin, AccountId>,
+	>;
+	#[cfg(not(feature = "runtime-benchmarks"))]
+	type CreateOrigin = AsEnsureOriginWithArg<NeverEnsureOrigin<AccountId>>;
+	type ForceOrigin = EnsureRoot<AccountId>;
+	type AssetDeposit = ConstU128<0>;
+	type AssetAccountDeposit = ConstU128<0>;
+	type MetadataDepositBase = ConstU128<0>;
+	type MetadataDepositPerByte = ConstU128<0>;
+	type ApprovalDeposit = ExistentialDeposit;
+	type StringLimit = assets::AssetsStringLimit;
+	type Freezer = ();
+	type Holder = ();
+	type Extra = ();
+	type CallbackHandle = ();
+	type WeightInfo = weights::pallet_assets_pool::WeightInfo<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = ();
+}
+
+pub type NativeAndAssets = fungible::UnionOf<
+	Balances,
+	individuality::AssetsWithHolder,
+	TargetFromLeft<xcm_config::RelayLocation, Location>,
+	Location,
+	AccountId,
+>;
+
+parameter_types! {
+	pub const AssetConversionPalletId: PalletId = PalletId(*b"py/ascon");
+	pub const LiquidityWithdrawalFee: Permill = Permill::from_percent(0);
+	pub StakingPotAccount: AccountId =
+		<pallet_collator_selection::StakingPotAccountId<Runtime> as frame_support::traits::TypedGet>::get();
+	pub LpFee: Permill = Permill::from_rational(3u32, 1_000u32);
+	pub const PoolSetupFee: Balance = system_para_deposit(1, 4) + assets::AssetDeposit::get();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+parameter_types! {
+	pub AssetsPalletIndex: u32 = <Assets as frame_support::traits::PalletInfoAccess>::index() as u32;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+frame_support::ord_parameter_types! {
+	pub const AssetConversionOrigin: AccountId =
+		sp_runtime::traits::AccountIdConversion::<AccountId>::into_account_truncating(
+			&AssetConversionPalletId::get(),
+		);
+}
+
+pub type PoolIdToAccountId =
+	pallet_asset_conversion::AccountIdConverter<AssetConversionPalletId, (Location, Location)>;
+
+impl pallet_asset_conversion::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Balance = Balance;
+	type HigherPrecisionBalance = sp_core::U256;
+	type AssetKind = Location;
+	type Assets = NativeAndAssets;
+	type PoolId = (Self::AssetKind, Self::AssetKind);
+	type PoolLocator = pallet_asset_conversion::WithFirstAsset<
+		xcm_config::RelayLocation,
+		AccountId,
+		Self::AssetKind,
+		PoolIdToAccountId,
+	>;
+	type PoolAssetId = u32;
+	type PoolAssets = PoolAssets;
+	type PoolSetupFee = PoolSetupFee;
+	type PoolSetupFeeAsset = xcm_config::RelayLocation;
+	type PoolSetupFeeTarget = ResolveAssetTo<StakingPotAccount, Self::Assets>;
+	type LiquidityWithdrawalFee = LiquidityWithdrawalFee;
+	type LPFee = LpFee;
+	type PalletId = AssetConversionPalletId;
+	type MaxSwapPathLength = ConstU32<3>;
+	type MintMinLiquidity = ConstU128<100>;
+	type WeightInfo = weights::pallet_asset_conversion::WeightInfo<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = assets_common::benchmarks::AssetPairFactory<
+		xcm_config::RelayLocation,
+		parachain_info::Pallet<Runtime>,
+		AssetsPalletIndex,
+		Self::AssetKind,
+	>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
-//
-// Individuality pallet indices match the `next-people-paseo` reference runtime of
-// `paritytech/individuality` wherever the index was still free here, so that a chain can be
-// migrated between the two without renumbering pallets. `RelayRandomness` and `OriginRestriction`
-// could not keep their reference indices (5 and 13) because `WeightReclaim` and `AssetRate` already
-// occupy them.
 construct_runtime!(
 	pub enum Runtime
 	{
@@ -756,6 +833,8 @@ construct_runtime!(
 		AssetTxPayment: pallet_asset_tx_payment = 14,
 		AssetsHolder: pallet_assets_holder = 15,
 		OriginRestriction: indiv_pallet_origin_restriction = 16,
+		AssetConversion: pallet_asset_conversion = 17,
+		PoolAssets: pallet_assets::<Instance1> = 18,
 
 		// Collator support. The order of these 5 are important and shall not change.
 		Authorship: pallet_authorship = 20,
@@ -781,13 +860,12 @@ construct_runtime!(
 
 		// Individuality: personhood and everything built on it.
 		People: indiv_pallet_people = 51,
-		// 52: previously used for `pallet-mob-rule` in the reference runtime.
-		// 53: previously used for `pallet-proof-of-ink` in the reference runtime.
-		// 54: previously used for the privacy voucher in the reference runtime.
-		Game: indiv_pallet_game = 55,
-		Score: indiv_pallet_score = 56,
-		// NFT claim credits awarded by the game and delivered to Asset Hub.
-		NftCredits: indiv_pallet_nft_credits = 57,
+		// 52: never used.
+		// 53: never used.
+		// 54: never used.
+		// 55: never used.
+		// 56: never used.
+		// 57: never used.
 		DummyDim: indiv_pallet_dummy_dim = 59,
 		PeopleLite: indiv_pallet_people_lite = 62,
 		Resources: indiv_pallet_resources = 63,
@@ -795,10 +873,10 @@ construct_runtime!(
 		Members: indiv_pallet_members = 67,
 		Coinage: indiv_pallet_coinage = 68,
 		MembersNotifier: indiv_pallet_members_notifier = 69,
-		Airdrop: indiv_pallet_airdrop = 70,
+		// 70: never used.
 		Honour: indiv_pallet_honour = 71,
 		Parameters: pallet_parameters = 73,
-		PeopleAirdrops: indiv_pallet_people_airdrops = 74,
+		// 74: never used.
 		NetworkSuffix: indiv_pallet_network_suffix = 75,
 	}
 );
@@ -808,8 +886,8 @@ mod benches {
 	use super::{
 		assets::hollar::{Hollar, HydrationLocation},
 		parameter_types, vec, xcm_config, AccountId, Balances, ExistentialDeposit, ParachainSystem,
-		PriceForSiblingParachainDelivery, Runtime, RuntimeCall, RuntimeOrigin, System, XcmConfig,
-		UNITS,
+		PoolAssetsInstance, PriceForSiblingParachainDelivery, Runtime, RuntimeCall, RuntimeOrigin,
+		System, XcmConfig, UNITS,
 	};
 	use alloc::{boxed::Box, vec::Vec};
 	use codec::Encode;
@@ -824,6 +902,8 @@ mod benches {
 		[pallet_asset_tx_payment, AssetTxPayment]
 		[pallet_asset_rate, AssetRate]
 		[pallet_assets, Assets]
+		[pallet_assets, Pool]
+		[pallet_asset_conversion, AssetConversion]
 		[pallet_balances, Balances]
 		[pallet_identity, Identity]
 		[pallet_message_queue, MessageQueue]
@@ -847,22 +927,17 @@ mod benches {
 		[pallet_xcm_benchmarks::fungible, XcmBalances]
 		[pallet_xcm_benchmarks::generic, XcmGeneric]
 		// Individuality
-		[indiv_pallet_airdrop, Airdrop]
 		[indiv_pallet_chunks_manager, ChunksManager]
 		[indiv_pallet_coinage, Coinage]
 		[indiv_pallet_dummy_dim, DummyDim]
-		[indiv_pallet_game, Game]
-		[indiv_pallet_nft_credits, NftCredits]
 		[indiv_pallet_honour, Honour]
 		[indiv_pallet_members, Members]
 		[indiv_pallet_members_notifier, MembersNotifier]
 		[indiv_pallet_origin_restriction, OriginRestriction]
 		[indiv_pallet_people, People]
-		[indiv_pallet_people_airdrops, PeopleAirdrops]
 		[indiv_pallet_people_lite, PeopleLite]
 		[indiv_pallet_relay_randomness, RelayRandomness]
 		[indiv_pallet_resources, Resources]
-		[indiv_pallet_score, Score]
 	);
 
 	impl frame_system_benchmarking::Config for Runtime {
@@ -1080,6 +1155,7 @@ mod benches {
 	pub use pallet_xcm::benchmarking::Pallet as PalletXcmExtrinsicsBenchmark;
 	pub type XcmBalances = pallet_xcm_benchmarks::fungible::Pallet<Runtime>;
 	pub type XcmGeneric = pallet_xcm_benchmarks::generic::Pallet<Runtime>;
+	pub type Pool = pallet_assets::Pallet<Runtime, PoolAssetsInstance>;
 	pub use frame_support::traits::WhitelistedStorageKeys;
 	pub use sp_storage::TrackedStorageKey;
 }
@@ -1100,14 +1176,6 @@ pub const TRANSACTION_MORTALITY_PERIOD: BlockNumber = 128;
 // (its birth hash is pruned before the window closes), so guard the invariant at compile time.
 const _: () = assert!(TRANSACTION_MORTALITY_PERIOD <= BlockHashCount::get());
 
-// Several Individuality pallets run offchain workers that submit *authorized* transactions:
-// unsigned extrinsics whose validity comes from `frame_system::AuthorizeCall` rather than from a
-// signature. These impls tell those workers how to assemble such an extrinsic for this runtime.
-//
-// They submit on extension version 0, not 1: `AuthorizeCall` has been part of version 0 since
-// before the Individuality deployment, and an authorized origin is not one of the anonymous origins
-// `RestrictOrigin` meters, so nothing in version 1 changes how these transactions are validated.
-// Staying on version 0 keeps the submitted payload smaller.
 impl<LocalCall> frame_system::offchain::CreateTransactionBase<LocalCall> for Runtime
 where
 	RuntimeCall: From<LocalCall>,
@@ -1393,35 +1461,6 @@ impl_runtime_apis! {
 			xcm_runtime_apis::authorized_aliases::Error
 		> {
 			PolkadotXcm::is_authorized_alias(origin, target)
-		}
-	}
-
-	impl indiv_pallet_game::runtime_api::PalletGameApi<Block, Balance> for Runtime {
-		fn play_deposit() -> Balance {
-			indiv_pallet_game::PlayDepositAmount::<Runtime>::get()
-		}
-	}
-
-	impl indiv_pallet_nft_credits::runtime_api::NftCreditsApi<Block, AccountId, BlockNumber> for Runtime {
-		fn nft_claim_credit_roots(
-			claimant: indiv_support::identity::AccountOrPerson<AccountId>,
-		) -> Vec<(BlockNumber, indiv_support::credit_trees::NftClaimCreditTree)> {
-			NftCredits::nft_claim_credit_roots(&claimant)
-		}
-
-		fn nft_claim_credit_proofs(
-			award_block: BlockNumber,
-			claimant: indiv_support::identity::AccountOrPerson<AccountId>,
-		) -> Result<Vec<indiv_pallet_nft_credits::NftClaimCreditProof>, indiv_pallet_nft_credits::NftClaimCreditProofError> {
-			NftCredits::nft_claim_credit_proofs(award_block, &claimant)
-		}
-
-		fn nft_claim_credit_proof_from_awards(
-			award_block: BlockNumber,
-			awards: Vec<indiv_pallet_nft_credits::NftClaimCreditAward<AccountId>>,
-			leaf_index: u32,
-		) -> Result<indiv_pallet_nft_credits::NftClaimCreditProof, indiv_pallet_nft_credits::NftClaimCreditProofError> {
-			NftCredits::nft_claim_credit_proof_from_awards(award_block, awards, leaf_index)
 		}
 	}
 

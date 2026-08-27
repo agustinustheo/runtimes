@@ -34,26 +34,6 @@
 //!   one name per person, claimed through a ring proof.
 //! * [`indiv_pallet_origin_restriction`] rate-limits the anonymous origins the extensions above
 //!   produce, since those origins pay no fee from an account.
-//!
-//! # Deployment steps
-//!
-//! Enacting the runtime upgrade activates none of this on its own:
-//!
-//! 1. The PGAS asset must exist before any PGAS flow works. This is meant to happen automatically
-//!    via `indiv_pallet_pgas::migration::CreatePgasAsset` in `migrations.rs` — but see the TODO
-//!    there, because that migration cannot currently succeed on this chain.
-//! 2. Subscription to People Polkadot's ring roots is driven from *there*, by
-//!    `MembersNotifier::subscribe` naming this chain and the `MembersSubscriber` pallet index (97);
-//!    there is no local call to make. Until the first batch of roots arrives, every personhood
-//!    proof on this chain fails. Requires an open HRMP channel in both directions.
-//! 3. `DotnsGateway::set_dispatcher_address` (Fellowship, root, or TechnicalMaintenance) — point
-//!    the gateway at the deployed `RootGatewayDispatcher` contract. `pallet-dotns-gateway` cannot
-//!    register any name until this is set, so the dotNS registry contract has to be deployed first.
-//! 4. Run collators with offchain workers enabled so the alias-account stale-mapping sweep can
-//!    submit authorized maintenance calls. The alias fee is governance-mutable.
-//!
-//! Optional, per-provider: `DotnsGateway::set_attestation_allowance` (Fellowship, root, or
-//! TechnicalMaintenance) to admit an attestation provider.
 
 use super::*;
 
@@ -64,12 +44,7 @@ use indiv_support::traits::{Context, Identifier, RingIndex};
 use polkadot_runtime_constants::system_parachain::{ASSET_HUB_ID, PEOPLE_ID};
 use sp_runtime::traits::AccountIdConversion;
 
-/// Wall-clock durations expressed in block numbers.
-///
-/// Asset Hub Polkadot authors a block every
-/// `RELAY_CHAIN_SLOT_DURATION_MILLIS / BLOCK_PROCESSING_VELOCITY` = 2s under elastic scaling. The
-/// `MINUTES`/`HOURS`/`DAYS` this runtime imports from `system_parachains_constants::async_backing`
-/// assume a 6s block, so using them for the durations below would silently scale them by 3x.
+/// Wall-clock durations expressed in parachain block numbers.
 pub mod time {
 	use super::BlockNumber;
 	use system_parachains_constants::polkadot::consensus::{
@@ -85,8 +60,7 @@ pub mod time {
 	pub const DAYS: BlockNumber = HOURS * 24;
 }
 
-/// Root, the Technical Fellowship voice, or TechnicalMaintenance may administer Individuality
-/// settings.
+/// Root or Technical Fellowship voice
 pub type RootOrFellows =
 	EitherOfDiverse<EnsureRoot<AccountId>, EnsureXcm<IsFellowshipVoice<FellowshipLocation>>>;
 
@@ -98,10 +72,6 @@ pub type RootOrFellowsOrTechnicalMaintenance =
 ///
 /// The id sits far above the `AutoIncAssetId` range so that it can never collide with a
 /// user-registered trust-backed asset.
-///
-/// NOTE: what actually keeps this id unreachable by a signed caller is `pallet-assets`' `id ==
-/// NextAssetId` guard, not the size of the id. That guard also prevents the asset from being
-/// *created* at this id — see the `CreatePgasAsset` TODO in `migrations.rs`.
 pub const PGAS_ASSET_ID: AssetIdForTrustBackedAssets = 2_000_000_000;
 
 parameter_types! {
@@ -127,15 +97,7 @@ parameter_types! {
 impl indiv_pallet_network_suffix::Config for Runtime {
 	type UpdateOrigin = EnsureRoot<Self::AccountId>;
 	type DefaultSuffix = DefaultNetworkSuffix;
-	type WeightInfo = NetworkSuffixWeightInfo;
-}
-
-/// Conservatively reuse the heavier `pallet_parameters` setter weight.
-pub struct NetworkSuffixWeightInfo;
-impl indiv_pallet_network_suffix::WeightInfo for NetworkSuffixWeightInfo {
-	fn set_network_suffix(_s: u32) -> frame_support::weights::Weight {
-		<weights::pallet_parameters::WeightInfo<Runtime> as pallet_parameters::WeightInfo>::set_parameter()
-	}
+	type WeightInfo = weights::indiv_pallet_network_suffix::WeightInfo<Runtime>;
 }
 
 /// Origin check restricted to the sibling parachain that publishes the ring roots.
@@ -426,11 +388,6 @@ pub mod benchmark_utils {
 
 	/// Builds a one-member Bandersnatch ring and returns everything needed to both seed its root
 	/// and prove membership of it.
-	///
-	/// This mirrors `ring_setup` in Individuality's
-	/// `runtimes/next-asset-hub-paseo/src/lib.rs`. `indiv_support::crypto` does not export the
-	/// benchmark helper at this pinned revision; keep this single local mirror in sync with review
-	/// r3734171704 until the SDK exports it.
 	fn ring_setup(
 		ring_exponent: RingExponent,
 		entropy: [u8; 32],

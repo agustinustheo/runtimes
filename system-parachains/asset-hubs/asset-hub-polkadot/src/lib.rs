@@ -205,7 +205,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	impl_name: Cow::Borrowed("statemint"),
 	spec_name: Cow::Borrowed("statemint"),
 	authoring_version: 1,
-	spec_version: 2_003_003,
+	spec_version: 2_004_000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 15,
@@ -1767,8 +1767,7 @@ construct_runtime!(
 		AssetsPrecompilesPermit: pallet_assets_precompiles::permit::pallet = 92,
 		VestingPrecompiles: pallet_vesting_precompiles::pallet = 93,
 
-		// Individuality. Indices match the `next-asset-hub-paseo` reference runtime of
-		// `paritytech/individuality`.
+		// Individuality
 		MembersSubscriber: indiv_pallet_members_subscriber = 97,
 		AliasAccounts: indiv_pallet_alias_accounts = 98,
 		Pgas: indiv_pallet_pgas = 99,

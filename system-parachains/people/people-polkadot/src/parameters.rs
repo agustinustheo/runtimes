@@ -1,13 +1,12 @@
 // Copyright (C) Parity Technologies (UK) Ltd.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Governance-mutable Individuality runtime parameters.
+//! Governance-mutable runtime parameters.
 
 use crate::{ExistentialDeposit, *};
 use frame_support::{
 	dynamic_params::{dynamic_pallet_params, dynamic_params},
 	traits::{ConstU32, EnsureOrigin, EnsureOriginWithArg},
-	PalletId,
 };
 use indiv_pallet_resources::types::LongTermStorageAllocation;
 use indiv_support::parameters::{
@@ -15,7 +14,6 @@ use indiv_support::parameters::{
 };
 pub use indiv_support::parameters::StatementAllowanceParameter;
 use polkadot_runtime_constants::system_parachain::BULLETIN_ID;
-use sp_runtime::traits::AccountIdConversion;
 use xcm::latest::prelude::{Location, Parachain};
 
 const SECONDS_PER_DAY: u32 = 24 * 60 * 60;
@@ -27,9 +25,6 @@ pub const STMT_STORE_CLEANUP_LIMIT_CAP: u32 = 50;
 pub const LONG_TERM_STORAGE_CLEANUP_LIMIT_CAP: u32 = 20;
 
 /// Dynamic runtime parameters configurable on-chain through [`pallet_parameters`].
-///
-/// These defaults preserve the Individuality integration's initial economics. Governance can
-/// adjust them after deployment without another runtime upgrade.
 #[dynamic_params(RuntimeParameters, pallet_parameters::Parameters::<Runtime>)]
 pub mod dynamic_params {
 	use super::*;
@@ -100,18 +95,8 @@ pub mod dynamic_params {
 		#[codec(index = 6)]
 		pub static LongTermStorageAllowanceForLitePeople: LongTermStorageAllocation =
 			LongTermStorageAllocation { transactions: 10, bytes: 100 * 1024 };
-		/// The `pallet-transaction-storage` index on Bulletin, set when Bulletin deploys it.
 		#[codec(index = 7)]
 		pub static BulletinTransactionStoragePalletIndex: u8 = 40;
-	}
-
-	/// People airdrop draw funding.
-	#[dynamic_pallet_params]
-	#[codec(index = 2)]
-	pub mod people_airdrops {
-		#[codec(index = 0)]
-		pub static PrizeSource: sp_runtime::AccountId32 =
-			PalletId(*b"pop/pads").into_account_truncating();
 	}
 
 	/// Lite-person registration pricing.
@@ -120,6 +105,21 @@ pub mod dynamic_params {
 	pub mod lite_personhood {
 		#[codec(index = 0)]
 		pub static RegistrationFee: Balance = 75 * UNITS;
+	}
+
+	/// Coinage deposits, both in DOT.
+	#[dynamic_pallet_params]
+	#[codec(index = 4)]
+	pub mod coinage {
+		/// Held from a sponsored instance's pot per loaded recycler key, until the coin is
+		/// unloaded or its recycler is archived. Prices the state a load occupies meanwhile;
+		/// revisit as the DOT price moves. Deposits already held keep the price they were taken
+		/// at.
+		#[codec(index = 0)]
+		pub static LoadDepositPrice: Balance = UNITS / 10;
+		/// Held from the creator of a sponsored instance for as long as it stays sponsored.
+		#[codec(index = 1)]
+		pub static InstanceCreationDeposit: Balance = 10 * UNITS;
 	}
 }
 
@@ -201,7 +201,12 @@ pub type LongTermStorageAllowanceForLitePeople =
 
 pub type LitePersonRegistrationFee =
 	AtLeast<dynamic_params::lite_personhood::RegistrationFee, ExistentialDeposit>;
-pub type PeopleAirdropsPrizeSource = dynamic_params::people_airdrops::PrizeSource;
+
+/// Coinage load deposit price, kept non-zero so sponsored loads always take some collateral (the
+/// pallet's integrity test requires it).
+pub type CoinageLoadDepositPrice =
+	AtLeast<dynamic_params::coinage::LoadDepositPrice, frame_support::traits::ConstU128<1>>;
+pub type CoinageInstanceCreationDeposit = dynamic_params::coinage::InstanceCreationDeposit;
 
 /// Root, the Fellowship governance voice, and Asset Hub's TechnicalMaintenance voice may update
 /// these parameters.
