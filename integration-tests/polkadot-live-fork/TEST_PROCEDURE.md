@@ -164,26 +164,25 @@ file and tears down every node.
 ## Recorded timing from the 2026-08-27 validated run
 
 The local timezone was UTC+7. Fresh candidates were built from PR #2 commit
-`565ec3f73103d9d2c2fe015a9b2035f8fda63674`, after merging the current PR #1233 through PR #1 into
+`807278a74445235601c38c3b96a1643f177d056b`, after merging the latest PR #1233 through PR #1 into
 PR #2. Both artifact-reuse variables were explicitly unset and all four production chains were
 resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Fresh candidate build | `4 min 8 s` with `CARGO_BUILD_JOBS=2` |
-| Fresh four-chain synchronization to `ready.json` | `1 h 7 min 54 s` |
+| Fresh candidate build | `4 min 19 s` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `47 min 37 s` |
 | Final spawn to ready marker | `49 s` |
 | Pre-upgrade verification | `24 s` |
 | Runtime-log checkpoint | `<1 s` |
-| Ordered activation through the stale harness assertion | `6 min 41 s`, including the one-time client build |
-| Corrected explicit recovery check | `9 s` |
+| Normal strict Asset Hub then People upgrade | `7 min 2 s` |
 | Configured post-upgrade verification | `15 min` plus command overhead |
 | Runtime-log extraction | About `1 s` |
-| Stop request to spawner exit | `47 s`, including stopped-state snapshots |
+| Stop request to spawner exit | `1 min 8 s`, including stopped-state snapshots |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
-and sampled all four chains every minute. Asset Hub was the largest and slowest capture at about 57
+and sampled all four chains every minute. Asset Hub was the largest and slowest capture at about 41
 minutes. The local node binaries exactly matched the official PreviewNet `v20260826.201435` macOS
 ARM64 artifacts and reported `1.24.2-weekly2026w34-eb220fa14e7`.
 
@@ -193,10 +192,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32733261` |
-| Asset Hub | `19931859` |
-| People | `9043172` |
-| Bulletin | `1547416` |
+| Relay | `32734803` |
+| Asset Hub | `19936574` |
+| People | `9047812` |
+| Bulletin | `1549114` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -226,19 +225,18 @@ The supplied terminal output proves these results:
   noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
 - The shutdown script ran after the final verification passed.
 
-The first upgrade invocation activated both exact candidates but its subsequent metadata assertion
-failed because it still expected the removed `Game` pallet. The assertion was corrected to the
-current pallet set. The opt-in `ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1` recovery check then
-completed successfully without resubmitting either upgrade. The default remains strict and rejects
-already-active candidates.
+The first shell invocation stopped before launching the upgrade client because macOS Bash 3.2
+treated an empty optional-argument array as unbound under `set -u`. No extrinsic had been submitted.
+The script was changed to use a Bash-3.2-safe optional scalar. The subsequent full upgrade ran on
+the normal strict path with recovery mode unset and exited zero.
 
 The complete default 900-second command then passed and included this final result:
 
 ```text
-relay: advanced 32733400 -> 32733550
-asset-hub: advanced 19932245 -> 19932695
-people: advanced 9043561 -> 9044011
-bulletin: advanced 1547551 -> 1547701
+relay: advanced 32734908 -> 32735058
+asset-hub: advanced 19936859 -> 19937309
+people: advanced 9048100 -> 9048550
+bulletin: advanced 1549215 -> 1549365
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ./scripts/stop.sh
 ```
@@ -249,24 +247,27 @@ stopped.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub: `61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938`
-- People: `4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff`
+- Asset Hub: `9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82`
+- People: `8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963`
 
 The four non-empty, gzip-valid snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `332102754` | `36fb53c28ff62f0208fb253191ffc7e846078187fbbd167cb1cd984168e1577b` |
-| Asset Hub | `2756488369` | `963c9ff1d5f5c1ac4ca304f819f7ff73ddf158caa980ee410b99746e481ed35c` |
-| People | `4854235` | `48ba375dd3cb1ebb1651752061bce08b8372e4633a0b3198b07fa8212c433ae9` |
-| Bulletin | `2590889` | `2e67ed06e02e3dbdca5ceab9ae3d5716590210f75a4963262b9c1a86d346888d` |
+| Relay | `327533298` | `4346875011861d10e96494014889aab1eb77b675ce936e96d84c4ffd725f7623` |
+| Asset Hub | `2755336406` | `2cd41db020daa0a1e5b77ac1ae470c6b06212bbca1735ce0eb39e718c9ad05cf` |
+| People | `4860689` | `b879393984684003d7775c309ed884e9ea30cdc29c2ec71e433a6b450ec4784b` |
+| Bulletin | `2591561` | `fee3dd27fb6f08384ace00d6b0024f7ee9f99c80fcbced1a83fef8cdb851c7be` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-001`.
-It is intentionally untracked and was not pushed. The directory uses 27 GiB and 228 GiB remained
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-002`.
+It is intentionally untracked and was not pushed. The directory uses 27 GiB and 221 GiB remained
 free after clean shutdown.
 
 ## Warnings and normal waits
+
+The RPC helpers require Node.js 22 or newer so the global WebSocket API is available. Node.js 20
+without `--experimental-websocket` fails before live preflight begins.
 
 The `wasm32-unknown-unknown` messages are build warnings. They did not fail this run.
 
@@ -283,7 +284,7 @@ Keep enough free space for the Rust build, captured snapshots, and spawned worki
 The retained artifact directory uses approximately 27 GiB after the latest run, including 23 GiB
 of stopped working databases. Start a cold clean run with at least 250 GiB free because temporary
 capture data, build products, and spawned working copies can coexist while the test is active. This
-fresh capture started with 253 GiB free and reported 228 GiB free after clean shutdown.
+fresh capture started with 252 GiB free and reported 221 GiB free after clean shutdown.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.

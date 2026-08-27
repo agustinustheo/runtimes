@@ -30,7 +30,7 @@ storage receiver needed for the later People-to-Bulletin flow.
 
 Run this on macOS ARM64 or Linux x86_64. You need:
 
-- Git, Rust/Cargo, Node.js, `make`, `curl`, `jq`, and `shasum`;
+- Git, Rust/Cargo, Node.js 22 or newer, `make`, `curl`, `jq`, and `shasum`;
 - network access to the four RPC endpoints and Polkadot peers;
 - the runtimes checkout containing this harness;
 - a current `polkadot-omni-node` binary at
@@ -228,17 +228,15 @@ The latest 2026-08-27 validation performed a fresh production synchronization fo
 Hub, People, and Bulletin with both artifact-reuse variables explicitly unset. Its measured timings
 were:
 
-- fresh candidate build: 4 minutes 8 seconds;
-- fresh four-chain production capture: 1 hour 7 minutes 54 seconds;
+- fresh candidate build: 4 minutes 19 seconds;
+- fresh four-chain production capture: 47 minutes 37 seconds;
 - final spawn to `network is up and running`: 49 seconds;
 - pre-upgrade verification: 24 seconds;
 - runtime-log checkpoint: less than 1 second;
-- ordered Asset Hub then People activation followed by the stale metadata assertion: 6 minutes 41
-  seconds, including the one-time client build;
-- corrected explicit recovery check: 9 seconds;
+- normal strict ordered Asset Hub then People upgrade: 7 minutes 2 seconds;
 - configured post-upgrade verification: exactly 15 minutes plus command overhead;
 - runtime-log extraction: about 1 second; and
-- stop request to foreground-spawner exit: 47 seconds, including stopped-state snapshots.
+- stop request to foreground-spawner exit: 1 minute 8 seconds, including stopped-state snapshots.
 
 The candidates were built with `CARGO_BUILD_JOBS=2` and
 `WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. The local `polkadot` and
@@ -248,23 +246,21 @@ runtime activation established compatibility, so no binary pin changed.
 
 ## Latest validated results
 
-The fresh capture recorded Relay `32733261`, Asset Hub `19931859`, People `9043172`, and Bulletin
-`1547416`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
+The fresh capture recorded Relay `32734803`, Asset Hub `19936574`, People `9047812`, and Bulletin
+`1549114`. The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 The exact Asset Hub and People `2004000` candidate SHA-256 hashes were
-`61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938` and
-`4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff`.
+`9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82` and
+`8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963`.
 
-Asset Hub and People both activated successfully in the required order. A post-activation harness
-assertion then failed because it still required the removed `Game` pallet. The assertion was
-updated to require the current Individuality pallet set. The opt-in
-`ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1` recovery mode then verified the already-active
-exact candidates and completed the People-to-Asset-Hub initialization check. Do not set that
-variable for a normal run: without it, `make upgrade` remains strict and rejects an already-active
-candidate.
+Asset Hub and People both activated successfully in the required order on the normal strict path,
+with `ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES` unset. The first shell invocation stopped before
+launching the client or submitting an extrinsic because macOS Bash 3.2 treats an empty array as
+unbound under `set -u`. The optional recovery argument was changed to a Bash-3.2-safe scalar. The
+subsequent complete strict invocation then passed without recovery.
 
-The final 900-second verification advanced Relay `32733400 -> 32733550` (+150), Asset Hub
-`19932245 -> 19932695` (+450), People `9043561 -> 9044011` (+450), and Bulletin
-`1547551 -> 1547701` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
+The final 900-second verification advanced Relay `32734908 -> 32735058` (+150), Asset Hub
+`19936859 -> 19937309` (+450), People `9048100 -> 9048550` (+450), and Bulletin
+`1549215 -> 1549365` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
 upgraded collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People,
 the notifier whitelisting parachain `1000`, and the notifier offchain worker submitting
 `send_init_page`. The omni-node emitted recurring `AuthorityDiscoveryApi_authorities`
@@ -272,15 +268,15 @@ compatibility messages both before and after the upgrades, but there was no pani
 migration, or essential-task failure.
 
 The fresh capture snapshot SHA-256 hashes were Relay
-`36fb53c28ff62f0208fb253191ffc7e846078187fbbd167cb1cd984168e1577b`, Asset Hub
-`963c9ff1d5f5c1ac4ca304f819f7ff73ddf158caa980ee410b99746e481ed35c`, People
-`48ba375dd3cb1ebb1651752061bce08b8372e4633a0b3198b07fa8212c433ae9`, and Bulletin
-`2e67ed06e02e3dbdca5ceab9ae3d5716590210f75a4963262b9c1a86d346888d`.
+`4346875011861d10e96494014889aab1eb77b675ce936e96d84c4ffd725f7623`, Asset Hub
+`2cd41db020daa0a1e5b77ac1ae470c6b06212bbca1735ce0eb39e718c9ad05cf`, People
+`b879393984684003d7775c309ed884e9ea30cdc29c2ec71e433a6b450ec4784b`, and Bulletin
+`fee3dd27fb6f08384ace00d6b0024f7ee9f99c80fcbced1a83fef8cdb851c7be`.
 
 After `make stop`, all 36 recorded RPC, P2P, and metrics ports had no listeners, and every
 artifact-related process had exited. The retained local artifact directory is
-`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-001`; it uses 27
-GiB, with 228 GiB free after shutdown.
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-002`; it uses 27
+GiB, with 221 GiB free after shutdown.
 
 ## Troubleshooting
 

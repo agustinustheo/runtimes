@@ -72,44 +72,44 @@ This harness gives evidence of live-state upgrades and of targeted cross-chain o
 ## Latest validated run
 
 The latest 2026-08-27 validation built fresh candidates from PR #2 commit
-`565ec3f73103d9d2c2fe015a9b2035f8fda63674`. That commit contains the signed PR #1 merge of the
-current PR #1233 stable2606 work and the signed PR #2 merge of PR #1. Both local node binaries
+`807278a74445235601c38c3b96a1643f177d056b`. That commit contains the signed PR #1 merge of the
+latest PR #1233 stable2606 work and the signed PR #2 merge of PR #1. Both local node binaries
 matched the official PreviewNet `v20260826.201435` macOS ARM64 assets exactly and reported
 `1.24.2-weekly2026w34-eb220fa14e7`. The run explicitly unset both artifact-reuse variables and
 performed a new production synchronization for all four chains. The fresh boundaries were Relay
-`32733261`, Asset Hub `19931859`, People `9043172`, and Bulletin `1547416`. Their captured runtime
+`32734803`, Asset Hub `19936574`, People `9047812`, and Bulletin `1549114`. Their captured runtime
 versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 
 The exact candidates activated in the run were:
 
 | Candidate | `spec_version` | SHA-256 |
 |---|---:|---|
-| Asset Hub | `2004000` | `61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938` |
-| People | `2004000` | `4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff` |
+| Asset Hub | `2004000` | `9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82` |
+| People | `2004000` | `8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963` |
 
 Asset Hub upgraded before People. Its PGAS, `NextAssetId`, and Revive migration checks passed before
 the People upgrade was submitted. People then activated the current Individuality pallet set, sent
-the pending initialization XCM, and activated the Asset Hub subscription. The initial post-People
-harness assertion still expected the removed `Game` pallet and therefore exited nonzero after both
-runtime upgrades had succeeded. The assertion was corrected to the current pallet set and an
-explicit, opt-in already-active recovery check completed successfully. Normal upgrade runs remain
-strict and reject an already-active candidate. The independent verifier then confirmed the exact
-candidate bytes, consumed authorizations, and unchanged Relay and Bulletin code.
+the pending initialization XCM, and activated the Asset Hub subscription. The normal strict path
+passed with recovery mode unset. The first shell invocation stopped before launching the client
+because macOS Bash 3.2 rejects an empty array under `set -u`; the optional recovery argument was
+changed to a Bash-3.2-safe scalar, after which the complete ordered upgrade exited zero. The
+independent verifier confirmed the exact candidate bytes, consumed authorizations, and unchanged
+Relay and Bulletin code.
 
 The full, unmodified 900-second verifier passed. All 15 one-minute samples advanced. Relay advanced
-`32733400 -> 32733550` (+150), Asset Hub `19932245 -> 19932695` (+450), People
-`9043561 -> 9044011` (+450), and Bulletin `1547551 -> 1547701` (+150). The post-checkpoint logs
+`32734908 -> 32735058` (+150), Asset Hub `19936859 -> 19937309` (+450), People
+`9048100 -> 9048550` (+450), and Bulletin `1549215 -> 1549365` (+150). The post-checkpoint logs
 showed XcmpQueue migration from version 6 to 7 on both upgraded chains, Asset Hub's `PGAS asset
 created`, People's `lite people collection created`, the notifier whitelisting parachain `1000`,
 and its offchain worker submitting `send_init_page`. They also contained recurring parachain
 `AuthorityDiscoveryApi_authorities` compatibility noise from the omni-node, present before and
 after the upgrades; no panic, failed migration, or essential-task failure appeared.
 
-The fresh candidate build took 4 minutes 8 seconds, fresh capture took 1 hour 7 minutes 54 seconds,
-spawn reached the ready marker in 49 seconds, the ordered activation plus the stale assertion took
-6 minutes 41 seconds, the corrected recovery check took 9 seconds, and shutdown snapshots plus
-foreground-spawner exit took 47 seconds. The network stopped cleanly: all 36 recorded RPC, P2P,
+The fresh candidate build took 4 minutes 19 seconds, fresh capture took 47 minutes 37 seconds,
+spawn reached the ready marker in 49 seconds, the normal strict ordered upgrade took 7 minutes 2
+seconds, and shutdown snapshots plus foreground-spawner exit took 1 minute 8 seconds. The network
+stopped cleanly: all 36 recorded RPC, P2P,
 and metrics ports were closed and no artifact-related process remained. Results and snapshots
 remain local and untracked in
-`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-001`. The retained
-artifact uses 27 GiB, and 228 GiB remained free after shutdown.
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-002`. The retained
+artifact uses 27 GiB, and 221 GiB remained free after shutdown.

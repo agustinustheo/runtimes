@@ -30,6 +30,15 @@ Expected result:
 
 The value can be greater than 4,096. Do not continue if it is less than 4,096.
 
+Confirm Node.js provides the WebSocket global used by the RPC helpers:
+
+```sh
+node --version
+node -p 'typeof WebSocket'
+```
+
+Use Node.js 22 or newer. The second command must print `function`.
+
 ## 2. Select a new artifact directory
 
 Use a name that does not exist. Change the run identifier for each clean run:
@@ -129,7 +138,7 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The 2026-08-27 fresh capture took 1 hour 7 minutes 54 seconds. Capture time depends on public peer
+The latest 2026-08-27 fresh capture took 47 minutes 37 seconds. Capture time depends on public peer
 availability and can vary substantially.
 
 ## 5. Confirm the capture files
@@ -145,10 +154,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 19931859,
-  "para_1004_start_block": 9043172,
-  "para_1010_start_block": 1547416,
-  "rc_start_block": 32733261
+  "para_1000_start_block": 19936574,
+  "para_1004_start_block": 9047812,
+  "para_1010_start_block": 1549114,
+  "rc_start_block": 32734803
 }
 ```
 
@@ -397,26 +406,31 @@ block-production checks passed; do not confuse it with a failed runtime migratio
 
 ### Recorded 2026-08-27 final result
 
-After correcting the stale removed-pallet assertion and completing the explicit recovery checks,
-the full default 900-second command passed and produced this aggregate advancement:
+The normal strict upgrade path passed with recovery mode unset. The full default 900-second command
+then passed and produced this aggregate advancement:
 
 ```text
-relay: advanced 32733400 -> 32733550
-asset-hub: advanced 19932245 -> 19932695
-people: advanced 9043561 -> 9044011
-bulletin: advanced 1547551 -> 1547701
+relay: advanced 32734908 -> 32735058
+asset-hub: advanced 19936859 -> 19937309
+people: advanced 9048100 -> 9048550
+bulletin: advanced 1549215 -> 1549365
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`61cac0c5cca1d05d834d8a1bb73ad5dac217184787c02950fcb0fde99bd6b938` and People
-`4e4f915d187763d1df87263f7e5d5e4ea29999b77a8787bcdb95ec8c95a3a5ff`.
+`9560d6907205d5fdf4b7088d120469bfc93ce248c11e94bf206246cf19dddd82` and People
+`8c7f43a8040fafeb2497e382bac4c213d2a5fd7cee26a2260b1c237ace1f3963`.
 
 The fresh capture snapshot hashes were Relay
-`36fb53c28ff62f0208fb253191ffc7e846078187fbbd167cb1cd984168e1577b`, Asset Hub
-`963c9ff1d5f5c1ac4ca304f819f7ff73ddf158caa980ee410b99746e481ed35c`, People
-`48ba375dd3cb1ebb1651752061bce08b8372e4633a0b3198b07fa8212c433ae9`, and Bulletin
-`2e67ed06e02e3dbdca5ceab9ae3d5716590210f75a4963262b9c1a86d346888d`.
+`4346875011861d10e96494014889aab1eb77b675ce936e96d84c4ffd725f7623`, Asset Hub
+`2cd41db020daa0a1e5b77ac1ae470c6b06212bbca1735ce0eb39e718c9ad05cf`, People
+`b879393984684003d7775c309ed884e9ea30cdc29c2ec71e433a6b450ec4784b`, and Bulletin
+`fee3dd27fb6f08384ace00d6b0024f7ee9f99c80fcbced1a83fef8cdb851c7be`.
+
+On macOS Bash 3.2, an initial shell invocation stopped before launching the upgrade client because
+an empty optional-argument array was treated as unbound under `set -u`. The script now uses a
+Bash-3.2-safe scalar. No upgrade extrinsic had been submitted; the subsequent complete strict run
+exited zero in 7 minutes 2 seconds.
 
 ## 12. Stop the network
 
