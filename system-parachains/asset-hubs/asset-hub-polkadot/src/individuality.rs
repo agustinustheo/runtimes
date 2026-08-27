@@ -38,7 +38,10 @@
 use super::*;
 
 use frame_support::traits::{ContainsPair, EnsureOrigin, Get};
-use indiv_support::traits::{Alias, RingExponent};
+use indiv_support::{
+	parameters::{AtLeastOne, AtMost, BenchmarkMax},
+	traits::{Alias, RingExponent},
+};
 #[cfg(feature = "runtime-benchmarks")]
 use indiv_support::traits::{Context, Identifier, RingIndex};
 use polkadot_runtime_constants::system_parachain::{ASSET_HUB_ID, PEOPLE_ID};
@@ -111,7 +114,7 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type RingRootsNotifier = RingRootsNotifierEndpoint;
 	type SelfParaId = MembersSubscriberSelfParaId;
 	type MaxMissingRootsPerCollection = ConstU32<255>;
-	type MaxDeletedRingsPerCollection = ConstU32<100>;
+	type MaxDeletedRingsPerCollection = MaxDeletedRingsPerCollection;
 	type MaxGapScanPerBatch = ConstU32<32>;
 	type PurgePageSize = ConstU32<100>;
 	type EnsureNotifierOrigin = EnsureNotifierSibling;
@@ -127,6 +130,14 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type OffchainWorkerInterval = ConstU32<3>;
 }
 
+pub type MaxDeletedRingsPerCollection = BenchmarkMax<
+	AtMost<
+		AtLeastOne<dynamic_params::individuality::MaxDeletedRingsPerCollection>,
+		ConstU32<100>,
+	>,
+	ConstU32<100>,
+>;
+
 /// Adapts the runtime's required alias fee to the alias-accounts pallet configuration.
 pub struct AliasFee;
 impl Get<Option<Balance>> for AliasFee {
@@ -134,6 +145,14 @@ impl Get<Option<Balance>> for AliasFee {
 		Some(dynamic_params::individuality::AliasFee::get())
 	}
 }
+
+pub type MaxStaleAliasBatch = BenchmarkMax<
+	AtMost<
+		AtLeastOne<dynamic_params::individuality::MaxStaleAliasBatch>,
+		ConstU32<32>,
+	>,
+	ConstU32<32>,
+>;
 
 impl indiv_pallet_alias_accounts::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_alias_accounts::WeightInfo<Runtime>;
@@ -151,7 +170,7 @@ impl indiv_pallet_alias_accounts::Config for Runtime {
 	type OffchainWorkerInterval = indiv_support::parameters::AtLeastOne<
 		dynamic_params::individuality::StaleAliasSweepInterval,
 	>;
-	type MaxStaleAliasBatch = ConstU32<32>;
+	type MaxStaleAliasBatch = MaxStaleAliasBatch;
 }
 
 impl indiv_precompile_personhood::Config for Runtime {
