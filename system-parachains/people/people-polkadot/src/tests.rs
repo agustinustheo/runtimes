@@ -17,8 +17,7 @@
 use crate::{
 	assets::hollar::HOLLAR_UNITS,
 	xcm_config::{AssetHubLocation, LocationToAccountId, RelayChainLocation},
-	Balance, Block, DotWeightToFee as WeightToFee, PeopleAirdrops, Runtime, RuntimeCall,
-	RuntimeOrigin, UNITS,
+	Block, DotWeightToFee as WeightToFee, Runtime, RuntimeCall, RuntimeOrigin,
 };
 use cumulus_primitives_core::relay_chain::AccountId;
 use sp_core::crypto::Ss58Codec;
@@ -242,8 +241,6 @@ fn transaction_extension_versions_are_stable() {
 		"UnitTransactionExtension",
 		"VerifyMultiSignature",
 		"AsPerson",
-		"ScoreAsParticipant",
-		"GameAsInvited",
 		"PeopleLiteAuth",
 		"AsMember",
 		"AsCoinage",
@@ -259,180 +256,79 @@ fn transaction_extension_versions_are_stable() {
 }
 
 #[test]
-fn individuality_storage_parameters_are_governance_mutable() {
-	use crate::{
-		parameters::{dynamic_params, RuntimeParameters, StatementAllowanceParameter},
-		Parameters, RuntimeGenesisConfig,
-	};
-	use frame_support::traits::Get;
-	use polkadot_runtime_constants::{
-		fellowship::FELLOWS_RANK,
-		system_parachain::{ASSET_HUB_ID, COLLECTIVES_ID},
-		xcm::body::TECHNICAL_MAINTENANCE_INDEX,
-	};
-	use sp_runtime::BuildStorage;
-
-	let mut ext = sp_io::TestExternalities::new(
-		RuntimeGenesisConfig::default().build_storage().expect("runtime genesis builds"),
-	);
-	ext.execute_with(|| {
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreGraceWindow as Get<u32>>::get(),
-			24 * 60 * 60,
-		);
-		assert_noop!(
-			Parameters::set_parameter(
-				RuntimeOrigin::signed(ALICE.into()),
-				RuntimeParameters::StatementStorage(
-					dynamic_params::statement_storage::Parameters::StmtStoreGraceWindow(
-						dynamic_params::statement_storage::StmtStoreGraceWindow,
-						Some(60 * 60),
-					),
-				),
-			),
-			sp_runtime::DispatchError::BadOrigin,
-		);
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::StatementStorage(
-				dynamic_params::statement_storage::Parameters::StmtStoreGraceWindow(
-					dynamic_params::statement_storage::StmtStoreGraceWindow,
-					Some(60 * 60),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreGraceWindow as Get<u32>>::get(),
-			60 * 60,
-		);
-
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::StatementStorage(
-				dynamic_params::statement_storage::Parameters::PersonStatementLimit(
-					dynamic_params::statement_storage::PersonStatementLimit,
-					Some(StatementAllowanceParameter { max_size: 42, max_count: 3 }),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::PersonStatementLimit as Get<
-				sp_statement_store::StatementAllowance,
-			>>::get(),
-			sp_statement_store::StatementAllowance { max_size: 42, max_count: 3 },
-		);
-
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
-				1,
-				[
-					Parachain(COLLECTIVES_ID),
-					Plurality { id: BodyId::Technical, part: BodyPart::Voice },
-					GeneralIndex(FELLOWS_RANK),
-				],
-			))),
-			RuntimeParameters::BulletinStorage(
-				dynamic_params::bulletin_storage::Parameters::LongTermStorageGraceWindow(
-					dynamic_params::bulletin_storage::LongTermStorageGraceWindow,
-					Some(2 * 60 * 60),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LongTermStorageGraceWindow as Get<u32>>::get(),
-			2 * 60 * 60,
-		);
-
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
-				1,
-				[
-					Parachain(ASSET_HUB_ID),
-					Plurality {
-						id: BodyId::Index(TECHNICAL_MAINTENANCE_INDEX),
-						part: BodyPart::Voice,
-					},
-				],
-			))),
-			RuntimeParameters::StatementStorage(
-				dynamic_params::statement_storage::Parameters::StmtStoreGraceWindow(
-					dynamic_params::statement_storage::StmtStoreGraceWindow,
-					Some(30 * 60),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreGraceWindow as Get<u32>>::get(),
-			30 * 60,
-		);
-
-		assert_noop!(
-			Parameters::set_parameter(
-				RuntimeOrigin::from(pallet_xcm::Origin::Xcm(Location::new(
-					1,
-					[
-						Parachain(ASSET_HUB_ID),
-						Plurality {
-							id: BodyId::Index(TECHNICAL_MAINTENANCE_INDEX + 1),
-							part: BodyPart::Voice,
-						},
-					],
-				))),
-				RuntimeParameters::StatementStorage(
-					dynamic_params::statement_storage::Parameters::StmtStoreGraceWindow(
-						dynamic_params::statement_storage::StmtStoreGraceWindow,
-						Some(15 * 60),
-					),
-				),
-			),
-			sp_runtime::DispatchError::BadOrigin,
-		);
-
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::PeopleAirdrops(
-				dynamic_params::people_airdrops::Parameters::PrizeSource(
-					dynamic_params::people_airdrops::PrizeSource,
-					Some(sp_runtime::AccountId32::new([42u8; 32])),
-				),
-			),
-		));
-		assert_eq!(
-			dynamic_params::people_airdrops::PrizeSource::get(),
-			sp_runtime::AccountId32::new([42u8; 32]),
-		);
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::LitePersonhood(
-				dynamic_params::lite_personhood::Parameters::RegistrationFee(
-					dynamic_params::lite_personhood::RegistrationFee,
-					Some(75 * UNITS),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_people_lite::Config>::RegistrationFee as Get<Balance>>::get(),
-			75 * UNITS,
-		);
-	});
-}
-
-#[test]
 fn individuality_cross_runtime_pallet_indices_are_pinned() {
-	use crate::MembersNotifier;
+	use crate::{individuality::ASSET_HUB_MEMBERS_SUBSCRIBER_INDEX, MembersNotifier};
 	use asset_hub_polkadot_runtime::individuality::RingRootsNotifierEndpoint;
 	use frame_support::traits::PalletInfoAccess;
 
 	assert_eq!(MembersNotifier::index(), 69);
 	assert_eq!(RingRootsNotifierEndpoint::get().pallet_index, MembersNotifier::index() as u8,);
 	assert_eq!(asset_hub_polkadot_runtime::MembersSubscriber::index(), 97);
-	assert_eq!(PeopleAirdrops::index(), 74);
+	assert_eq!(
+		ASSET_HUB_MEMBERS_SUBSCRIBER_INDEX,
+		asset_hub_polkadot_runtime::MembersSubscriber::index() as u8,
+	);
+}
+
+#[test]
+fn asset_hub_subscription_whitelist_matches_asset_hub() {
+	use crate::individuality::{
+		asset_hub_subscription_whitelist, LitePeopleRingExponent, MembersFlexibleRingExponent,
+	};
+	use cumulus_primitives_core::ParaId;
+	use frame_support::traits::PalletInfoAccess;
+	use indiv_support::traits::{PEOPLE_IDENTIFIER, PEOPLE_LITE_IDENTIFIER};
+	use polkadot_runtime_constants::system_parachain::ASSET_HUB_ID;
+
+	let whitelist = asset_hub_subscription_whitelist();
+	assert_eq!(whitelist.len(), 1);
+	let entry = &whitelist[0];
+	assert_eq!(entry.para_id, ParaId::from(ASSET_HUB_ID));
+	assert_eq!(entry.pallet_index, asset_hub_polkadot_runtime::MembersSubscriber::index() as u8);
+	assert_eq!(
+		entry.collections,
+		vec![
+			(*PEOPLE_IDENTIFIER, MembersFlexibleRingExponent::get().exponent()),
+			(*PEOPLE_LITE_IDENTIFIER, LitePeopleRingExponent::get().exponent()),
+		],
+	);
+	assert!(entry.collections.windows(2).all(|pair| pair[0].0 < pair[1].0));
+}
+
+#[test]
+fn seed_asset_hub_subscription_whitelist_migration_seeds_the_entry() {
+	use crate::{
+		individuality::asset_hub_subscription_whitelist,
+		migrations::SeedAssetHubSubscriptionWhitelist, Runtime, RuntimeGenesisConfig,
+	};
+	use cumulus_primitives_core::ParaId;
+	use frame_support::traits::OnRuntimeUpgrade;
+	use indiv_pallet_members_notifier::{Pallet as MembersNotifierPallet, SubscriptionWhitelist};
+	use polkadot_runtime_constants::system_parachain::ASSET_HUB_ID;
+	use sp_runtime::BuildStorage;
+
+	let mut ext =
+		sp_io::TestExternalities::new(RuntimeGenesisConfig::default().build_storage().unwrap());
+	ext.execute_with(|| {
+		let para_id = ParaId::from(ASSET_HUB_ID);
+		assert!(SubscriptionWhitelist::<Runtime>::get(para_id).is_none());
+
+		SeedAssetHubSubscriptionWhitelist::on_runtime_upgrade();
+
+		let stored = SubscriptionWhitelist::<Runtime>::get(para_id)
+			.expect("the migration seeds the Asset Hub whitelist entry");
+		let expected = MembersNotifierPallet::<Runtime>::resolve_whitelist_entry(
+			&asset_hub_subscription_whitelist()[0],
+		)
+		.expect("the whitelist entry is well-formed");
+		assert_eq!(stored, expected);
+	});
 }
 
 #[test]
 fn individuality_deployment_order_guards_are_enforced() {
 	use crate::{
-		individuality::StableAssetLocation, Assets, ChunksManager, Coinage, RuntimeGenesisConfig,
+		assets::hollar::HollarLocation, Assets, ChunksManager, Coinage, RuntimeGenesisConfig,
 	};
 	use indiv_support::traits::RingExponent;
 	use sp_runtime::{transaction_validity::TransactionValidityError, BuildStorage};
@@ -451,7 +347,7 @@ fn individuality_deployment_order_guards_are_enforced() {
 
 		// Coinage refuses an unregistered backing asset. Once governance funds the pallet account's
 		// minimum balance, it can create sufficient instances for that backing asset.
-		let stable = StableAssetLocation::get();
+		let stable = HollarLocation::get();
 		assert_noop!(
 			Coinage::create_sufficient_instance(
 				RuntimeOrigin::root(),
@@ -486,12 +382,6 @@ fn individuality_deployment_order_guards_are_enforced() {
 		let mut instances = Coinage::get_instance_ids(stable);
 		instances.sort();
 		assert_eq!(instances, vec![0, 1]);
-
-		// No schedule means no game state or score round is active.
-		assert!(indiv_pallet_game::Game::<Runtime>::get().is_none());
-		assert!(indiv_pallet_game::GameSchedules::<Runtime>::get().is_empty());
-		assert!(indiv_pallet_score::RoundPlanning::<Runtime>::get().is_none());
-		assert!(indiv_pallet_score::Participants::<Runtime>::iter().next().is_none());
 	});
 }
 
@@ -522,186 +412,6 @@ fn bulletin_destination_is_governable_but_must_remain_a_sibling_parachain() {
 			Err(sp_runtime::DispatchError::Other(
 				"Bulletin destination must be a sibling parachain"
 			)),
-		);
-	});
-}
-
-#[test]
-fn individuality_dynamic_parameter_extremes_do_not_brick_parameter_updates() {
-	use crate::{
-		individuality::BulletinDataStore,
-		parameters::{dynamic_params, RuntimeParameters, StatementAllowanceParameter},
-		ExistentialDeposit, Parameters, RuntimeGenesisConfig,
-	};
-	use indiv_pallet_resources::types::LongTermStorageAllocation;
-	use frame_support::traits::Get;
-	use sp_runtime::BuildStorage;
-
-	macro_rules! statement_parameter {
-		($name:ident, $value:expr) => {
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::root(),
-				RuntimeParameters::StatementStorage(
-					dynamic_params::statement_storage::Parameters::$name(
-						dynamic_params::statement_storage::$name,
-						Some($value),
-					),
-				),
-			));
-		};
-	}
-	macro_rules! bulletin_parameter {
-		($name:ident, $value:expr) => {
-			assert_ok!(Parameters::set_parameter(
-				RuntimeOrigin::root(),
-				RuntimeParameters::BulletinStorage(
-					dynamic_params::bulletin_storage::Parameters::$name(
-						dynamic_params::bulletin_storage::$name,
-						Some($value),
-					),
-				),
-			));
-		};
-	}
-
-	let mut ext = sp_io::TestExternalities::new(
-		RuntimeGenesisConfig::default().build_storage().expect("runtime genesis builds"),
-	);
-	ext.execute_with(|| {
-		let zero_allowance = StatementAllowanceParameter { max_size: 0, max_count: 0 };
-		let max_allowance = StatementAllowanceParameter { max_size: u32::MAX, max_count: u32::MAX };
-		statement_parameter!(AccountsApiAllowance, zero_allowance.clone());
-		statement_parameter!(AccountsApiAllowance, max_allowance.clone());
-		statement_parameter!(StmtStoreSlotsPerPeriod, 0u32);
-		statement_parameter!(StmtStoreSlotsPerPeriod, u32::MAX);
-		statement_parameter!(LiteStmtStoreSlotsPerPeriod, 0u32);
-		statement_parameter!(LiteStmtStoreSlotsPerPeriod, u32::MAX);
-		statement_parameter!(StmtStoreCleanupLimit, 0u32);
-		statement_parameter!(StmtStoreCleanupLimit, u32::MAX);
-		statement_parameter!(StmtStoreReplacementCooldown, 0u32);
-		statement_parameter!(StmtStoreReplacementCooldown, u32::MAX);
-		statement_parameter!(StmtStoreGraceWindow, 0u32);
-		statement_parameter!(StmtStoreGraceWindow, u32::MAX);
-		statement_parameter!(NotificationAllowance, zero_allowance.clone());
-		statement_parameter!(NotificationAllowance, max_allowance.clone());
-		statement_parameter!(NotificationSlotsPerPeriod, 0u8);
-		statement_parameter!(NotificationSlotsPerPeriod, u8::MAX);
-		statement_parameter!(LiteNotificationSlotsPerPeriod, 0u8);
-		statement_parameter!(LiteNotificationSlotsPerPeriod, u8::MAX);
-		statement_parameter!(NotificationPeriodDuration, 0u32);
-		statement_parameter!(NotificationPeriodDuration, u32::MAX);
-		statement_parameter!(LitePersonStatementLimit, zero_allowance.clone());
-		statement_parameter!(LitePersonStatementLimit, max_allowance.clone());
-		statement_parameter!(PersonStatementLimit, zero_allowance);
-		statement_parameter!(PersonStatementLimit, max_allowance);
-
-		let zero_allocation = LongTermStorageAllocation { transactions: 0, bytes: 0 };
-		let max_allocation = LongTermStorageAllocation { transactions: u32::MAX, bytes: u64::MAX };
-		bulletin_parameter!(LongTermStoragePeriodDuration, 0u32);
-		bulletin_parameter!(LongTermStoragePeriodDuration, u32::MAX);
-		bulletin_parameter!(LongTermStorageGraceWindow, 0u32);
-		bulletin_parameter!(LongTermStorageGraceWindow, u32::MAX);
-		bulletin_parameter!(LongTermStorageClaimsPerPeriod, 0u8);
-		bulletin_parameter!(LongTermStorageClaimsPerPeriod, u8::MAX);
-		bulletin_parameter!(LongTermStorageCleanupLimit, 0u32);
-		bulletin_parameter!(LongTermStorageCleanupLimit, u32::MAX);
-		bulletin_parameter!(LongTermStorageAllowanceForPeople, zero_allocation);
-		bulletin_parameter!(LongTermStorageAllowanceForPeople, max_allocation);
-		bulletin_parameter!(LongTermStorageAllowanceForLitePeople, zero_allocation);
-		bulletin_parameter!(LongTermStorageAllowanceForLitePeople, max_allocation);
-		let zero_para = Location::new(1, [Parachain(0)]);
-		bulletin_parameter!(BulletinChainLocation, zero_para.clone());
-		assert_eq!(BulletinDataStore::bulletin_chain_location(), Ok(zero_para));
-		let max_para = Location::new(1, [Parachain(u32::MAX)]);
-		bulletin_parameter!(BulletinChainLocation, max_para.clone());
-		assert_eq!(BulletinDataStore::bulletin_chain_location(), Ok(max_para));
-		bulletin_parameter!(BulletinTransactionStoragePalletIndex, 0u8);
-		bulletin_parameter!(BulletinTransactionStoragePalletIndex, u8::MAX);
-
-		// `pallet_parameters` accepts every SCALE-decodable value. The runtime consumes the
-		// guarded aliases from `indiv_support::parameters`, so malicious or accidental extremes
-		// cannot violate the resources pallet's invariants or exceed its benchmarked cleanup bounds.
-		statement_parameter!(StmtStoreSlotsPerPeriod, 0u32);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreSlotsPerPeriod as Get<u32>>::get(),
-			1,
-		);
-		statement_parameter!(LiteStmtStoreSlotsPerPeriod, u32::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LiteStmtStoreSlotsPerPeriod as Get<u32>>::get(),
-			1,
-		);
-		statement_parameter!(StmtStoreCleanupLimit, u32::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreCleanupLimit as Get<u32>>::get(),
-			50,
-		);
-		statement_parameter!(StmtStoreReplacementCooldown, u32::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreReplacementCooldown as Get<u32>>::get(),
-			24 * 60 * 60,
-		);
-		statement_parameter!(StmtStoreGraceWindow, 0u32);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::StmtStoreGraceWindow as Get<u32>>::get(),
-			1,
-		);
-		statement_parameter!(NotificationSlotsPerPeriod, 0u8);
-		statement_parameter!(LiteNotificationSlotsPerPeriod, u8::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LiteNotificationSlotsPerPeriod as Get<u8>>::get(),
-			0,
-		);
-		bulletin_parameter!(LongTermStoragePeriodDuration, 0u32);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LongTermStoragePeriodDuration as Get<u32>>::get(),
-			1,
-		);
-		bulletin_parameter!(LongTermStorageGraceWindow, u32::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LongTermStorageGraceWindow as Get<u32>>::get(),
-			0,
-		);
-		bulletin_parameter!(LongTermStorageClaimsPerPeriod, 0u8);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LongTermStorageClaimsPerPeriod as Get<u8>>::get(),
-			1,
-		);
-		bulletin_parameter!(LongTermStorageCleanupLimit, u32::MAX);
-		assert_eq!(
-			<<Runtime as indiv_pallet_resources::Config>::LongTermStorageCleanupLimit as Get<u32>>::get(),
-			20,
-		);
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::PeopleAirdrops(
-				dynamic_params::people_airdrops::Parameters::PrizeSource(
-					dynamic_params::people_airdrops::PrizeSource,
-					Some(sp_runtime::AccountId32::new([0u8; 32])),
-				),
-			),
-		));
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::LitePersonhood(
-				dynamic_params::lite_personhood::Parameters::RegistrationFee(
-					dynamic_params::lite_personhood::RegistrationFee,
-					Some(Balance::MAX),
-				),
-			),
-		));
-		assert_ok!(Parameters::set_parameter(
-			RuntimeOrigin::root(),
-			RuntimeParameters::LitePersonhood(
-				dynamic_params::lite_personhood::Parameters::RegistrationFee(
-					dynamic_params::lite_personhood::RegistrationFee,
-					Some(0),
-				),
-			),
-		));
-		assert_eq!(
-			<<Runtime as indiv_pallet_people_lite::Config>::RegistrationFee as Get<Balance>>::get(),
-			ExistentialDeposit::get(),
 		);
 	});
 }

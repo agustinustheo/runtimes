@@ -15,12 +15,6 @@
 
 //! Expose the auto generated weight files.
 
-// TODO: Regenerate before release on the target hardware: this placeholder set mirrors the
-// reference runtime for `indiv_pallet_network_suffix`, `indiv_pallet_people_airdrops`,
-// `indiv_pallet_people_lite`,
-// `asset-hub-polkadot/indiv_pallet_alias_accounts`, and
-// `asset-hub-polkadot/indiv_pallet_members_subscriber`.
-
 pub mod block_weights;
 pub mod cumulus_pallet_parachain_system;
 pub mod cumulus_pallet_weight_reclaim;
@@ -28,23 +22,23 @@ pub mod cumulus_pallet_xcmp_queue;
 pub mod extrinsic_weights;
 pub mod frame_system;
 pub mod frame_system_extensions;
-pub mod indiv_pallet_airdrop;
 pub mod indiv_pallet_chunks_manager;
+pub mod indiv_pallet_coinage;
 pub mod indiv_pallet_dummy_dim;
-pub mod indiv_pallet_game;
 pub mod indiv_pallet_honour;
 pub mod indiv_pallet_members;
+pub mod indiv_pallet_members_notifier;
 pub mod indiv_pallet_network_suffix;
 pub mod indiv_pallet_origin_restriction;
 pub mod indiv_pallet_people;
-pub mod indiv_pallet_people_airdrops;
 pub mod indiv_pallet_people_lite;
 pub mod indiv_pallet_relay_randomness;
 pub mod indiv_pallet_resources;
-pub mod indiv_pallet_score;
+pub mod pallet_asset_conversion;
 pub mod pallet_asset_rate;
 pub mod pallet_asset_tx_payment;
-pub mod pallet_assets;
+pub mod pallet_assets_assets;
+pub mod pallet_assets_pool;
 pub mod pallet_balances;
 pub mod pallet_collator_selection;
 pub mod pallet_identity;
