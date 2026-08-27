@@ -1485,7 +1485,7 @@ pub mod dynamic_params {
 			Weight::from_parts(100_000_000_000, 2 * 1024 * 1024);
 		/// Maximum age of a dotNS attestation signature.
 		#[codec(index = 7)]
-		pub static DotnsMaxValiditySeconds: u64 = 3 * 24 * 60 * 60;
+		pub static DotnsMaxValiditySeconds: u64 = 60 * 60;
 		/// Permitted future clock skew for a dotNS attestation signature.
 		#[codec(index = 8)]
 		pub static DotnsMaxFutureSkewSeconds: u64 = 30;
@@ -1506,6 +1506,12 @@ pub mod dynamic_params {
 		/// Block interval for the alias-account stale-mapping sweep.
 		#[codec(index = 12)]
 		pub static StaleAliasSweepInterval: BlockNumber = HOURS;
+		/// Maximum deleted rings tracked for one collection.
+		#[codec(index = 13)]
+		pub static MaxDeletedRingsPerCollection: u32 = 100;
+		/// Maximum aliases processed by one stale-alias sweep call.
+		#[codec(index = 14)]
+		pub static MaxStaleAliasBatch: u32 = 32;
 	}
 }
 
@@ -1766,6 +1772,7 @@ construct_runtime!(
 		AssetsPrecompilesPermit: pallet_assets_precompiles::permit::pallet = 92,
 		VestingPrecompiles: pallet_vesting_precompiles::pallet = 93,
 
+		// Individuality pallets
 		MembersSubscriber: indiv_pallet_members_subscriber = 97,
 		AliasAccounts: indiv_pallet_alias_accounts = 98,
 		Pgas: indiv_pallet_pgas = 99,
