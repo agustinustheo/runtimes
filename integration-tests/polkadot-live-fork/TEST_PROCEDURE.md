@@ -161,32 +161,31 @@ Run `make stop` after all checks pass.
 Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
 file and tears down every node.
 
-## Recorded timing from the 2026-08-28 UTC+7 validated run
+## Recorded timing from the 2026-08-29 UTC validated run
 
-The validation completed on 2026-08-28 local time (2026-08-27 UTC). Final candidates were built
-from PR #2 commit `811338261f9f7fadb82b1273864ecb51e8f94dcb`, which contains signed merges of PR
-#1233 at `62fd354526b27e6dfc1b64534d77b9c4069e0367` through PR #1 at
-`334a81cc0255c3743cd436bdd90d979a73314ec0`. Both artifact-reuse variables were explicitly unset,
+The validation completed on 2026-08-29 UTC. Candidates were built from PR #2 commit
+`72aeee6e54c1f2357b8b2dbab44ce1dd2316d6e0`, which contains signed PR #1 merge
+`bb7e123b7c5994fa73330556e53e7d88a306572e` and PR #1233
+`1a5410be8244b00fbcec68a5efc54b186220c5c5`. Both artifact-reuse variables were explicitly unset,
 and all four production chains were resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Full-clean candidate build | `13 min 57 s` with `CARGO_BUILD_JOBS=2` |
-| Fresh four-chain synchronization to `ready.json` | `3 h 12 min 54 s` |
-| Candidate-specific localhost materialization | `8 min 48 s` |
-| Final spawn to ready marker | `49 s` |
+| Clean candidate build | `13 min 53 s` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `2 h 45 min 49 s` |
+| Spawn to ready marker | `51 s` |
 | Fork verification, pre-upgrade verification, and runtime-log checkpoint | `40 s`, including the `24 s` block-production observation |
-| Normal strict Asset Hub then People upgrade | `7 min 20 s` |
-| Configured post-upgrade verification | `15 min` plus command overhead |
-| Runtime-log extraction | About `1 s` |
-| Stop request to spawner exit | `47 s` |
+| Strict ordered activation attempt | `8 min`, through both activations before the stale metadata assertion |
+| Corrected explicit recovery checks | `9 s`, without resubmission |
+| Configured post-upgrade verification | Exactly `15 min` |
+| Runtime-log extraction and manual audit | About `3 s` |
+| Stop request to spawner exit | `21 s` |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
 and sampled all four chains every minute. Asset Hub's public-peer synchronization dominated the
-fresh capture time. The local node binaries exactly matched the official PreviewNet
-`v20260826.201435` macOS
-ARM64 artifacts and reported `1.24.2-weekly2026w34-eb220fa14e7`.
+fresh capture time. The local node binaries exactly matched the published Polkadot SDK
+`polkadot-stable2606-1` macOS ARM64 artifacts and reported `1.24.1-8ae9775dc43`.
 
 ## Recorded boundaries
 
@@ -194,10 +193,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32741430` |
-| Asset Hub | `19950771` |
-| People | `9061825` |
-| Bulletin | `1554250` |
+| Relay | `32766531` |
+| Asset Hub | `20018213` |
+| People | `9130240` |
+| Bulletin | `1579329` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -223,59 +222,50 @@ The supplied terminal output proves these results:
   Hub's `PGAS asset created`, and People's `lite people collection created` automatic migration
   hook. The notifier whitelisted parachain `1000` and its offchain worker logged a successful
   `send_init_page` submission.
-- The scoped logs contained recurring omni-node `AuthorityDiscoveryApi_authorities` compatibility
-  noise before and after the upgrades, but no panic, failed migration, or essential-task failure.
+- The scoped post-checkpoint logs contained zero error, panic, failed-migration, runtime-trap,
+  fatal, or essential-task-failure lines.
 - The shutdown script ran after the final verification passed.
 
-The full upgrade ran on the normal strict path with recovery mode unset and exited zero. One prior
-shell attempt omitted Cargo from `PATH` and stopped before launching the client or changing chain
-state. The Bash-3.2-safe optional recovery scalar introduced by the preceding validation remained
-in place.
+The strict upgrade invocation started with recovery mode unset and activated Asset Hub before
+People. Its post-activation People metadata check then failed because the harness still required the
+intentionally removed `Honour` pallet. The assertion was corrected to require the current pallet
+set and reject `Honour`; formatting and locked release checks passed. The documented explicit
+recovery invocation verified both exact active code blobs, completed the XCM/subscription checks
+without resubmission, and exited zero.
 
 The complete default 900-second command then passed and included this final result:
 
 ```text
-relay: advanced 32741524 -> 32741674
-asset-hub: advanced 19951030 -> 19951480
-people: advanced 9061916 -> 9062066
-bulletin: advanced 1554341 -> 1554491
+relay: advanced 32766671 -> 32766821
+asset-hub: advanced 20018605 -> 20019055
+people: advanced 9130635 -> 9131085
+bulletin: advanced 1579466 -> 1579616
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
-This output completes the final 900-second block-production check. All 42 captured related PIDs had
-exited, all 36 recorded RPC, P2P, and metrics ports had no listeners after the spawner exited, and
-no artifact-related process remained.
+This output completes the final 900-second block-production check. Every related process had exited,
+all captured RPC, P2P, and metrics ports had no listeners after the spawner exited, and no
+artifact-related process remained.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub (`2850993` bytes): `7a39bcb6fe809bf81d644263a5ca870a5fa919fdc477f10228f0f235286a7f1e`
-- People (`1796549` bytes): `fdd9c605680597f4e0b5c8e4ccc01d09d8b39321e2df773d9036b4690278292a`
+- Asset Hub (`2848732` bytes): `e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d`
+- People (`1787392` bytes): `93badb05d46b54cbbbacc4475dbf7da74058014ac6ba15d6b5511803f451d1e6`
 
 The four non-empty, gzip-valid snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `223995611` | `6ffcfc0d0228086c363df3368f1d489392742191f417fc85baae33e64ea33aed` |
-| Asset Hub | `2755887249` | `b9d7d0fc30c0c862dea667dbbbe7e9deb9e71289ad00f127a4bb9e5f250125f3` |
-| People | `4854932` | `cb440ff959c66e4bcee749ff49089fa1366962999bbe32ff8c0a41444d80b986` |
-| Bulletin | `2589934` | `2f30d63796b09448321c8f87910c62efe10589d9c085a3f7d18a352183ca57d9` |
-
-Three formatting-only base commits landed after the fresh production capture and changed the
-reproducible candidate bytes. The captured snapshots were restored to localhost and materialized
-at the same boundaries with the final Relay, Asset Hub, and People authorizations. Bulletin has no
-candidate authorization and uses its untouched fresh production snapshot. No production peer was
-contacted in this step, and neither artifact-reuse control was enabled. For provenance, the direct
-fresh-capture hashes were Relay
-`882c8f94e13a8f3ac830916a27cb88b0e5f8b7c2f161e99663e27aa0084a5b10`, Asset Hub
-`88c456decb4197abc707d8bfbe64173096b2a4dec4cc28f7d771ab88f06ff135`, People
-`aa46ea62679405bdf97ef0f9e5d42d93c8de21cb17e47c425f2fb1be122b861b`, and Bulletin
-`2f30d63796b09448321c8f87910c62efe10589d9c085a3f7d18a352183ca57d9`.
+| Relay | `328756950` | `f4fa24062144c6e3a984dd213a690e5acba261c80e79509fdfc912edaacbb6cd` |
+| Asset Hub | `2760102854` | `cb2623ed9835487998aa2a36b0b1a2b61a08f415baffc09589b060a5a2823d32` |
+| People | `4878485` | `c8dbc7dd83f4cc3a10e27dd6fc8558b19c88f8815f62e2756b300c3fbc3c7a9e` |
+| Bulletin | `2594318` | `ef5c97254b34a641824b60e6ce80940f7f18b83c558383808e3b953f1715b2f7` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-007`.
-It is intentionally untracked and was not pushed. The final validation directory uses 25 GiB, and
-216 GiB remained free after clean shutdown. The original direct production capture is retained
-separately under the same prefix ending in `-006`.
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260829-001`.
+It is intentionally untracked and was not pushed. The validation directory uses 26 GiB, and 243
+GiB remained free after clean shutdown. After both exact candidate WASMs were retained under
+`candidates` and this run's Cargo targets were cleaned, 250 GiB was free.
 
 ## Warnings and normal waits
 
@@ -294,11 +284,12 @@ only if the process still has peers or the downloaded byte count continues to in
 
 Keep enough free space for the Rust build, captured snapshots, and spawned working copies.
 
-The retained final validation directory uses approximately 25 GiB after the latest run. Start a
+The retained final validation directory uses approximately 26 GiB after the latest run. Start a
 cold clean run with at least 250 GiB free because temporary
-capture data, build products, and spawned working copies can coexist while the test is active. This
-full repository target clean removed 10.2 GiB before the candidates were rebuilt. Preflight
-reported at least 249 GiB free after that build, and 216 GiB remained after clean shutdown.
+capture data, build products, and spawned working copies can coexist while the test is active.
+Preflight began with 276 GiB free; 268 GiB remained after the candidate build and 243 GiB after
+clean shutdown. The post-run root and upgrade-client Cargo cleans removed 6.0 GiB and 628.2 MiB,
+restoring free space to 250 GiB.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.

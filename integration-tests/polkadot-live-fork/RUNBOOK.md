@@ -224,75 +224,67 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The latest validation completed on 2026-08-28 UTC+7 (2026-08-27 UTC). It performed a fresh
-production synchronization for Relay, Asset Hub, People, and Bulletin with both artifact-reuse
-variables explicitly unset. Its measured timings were:
+The latest validation completed on 2026-08-29 UTC. It performed a fresh production synchronization
+for Relay, Asset Hub, People, and Bulletin with both artifact-reuse variables explicitly unset. Its
+measured timings were:
 
-- full-clean candidate build: 13 minutes 57 seconds;
-- fresh four-chain production capture: 3 hours 12 minutes 54 seconds;
-- candidate-specific localhost materialization after late base changes: 8 minutes 48 seconds;
-- final spawn to `network is up and running`: 49 seconds;
-- fork verification, pre-upgrade verification, and runtime-log checkpoint: 40 seconds, including
-  the 24-second block-production observation;
-- normal strict ordered Asset Hub then People upgrade: 7 minutes 20 seconds;
-- configured post-upgrade verification: exactly 15 minutes plus command overhead;
-- runtime-log extraction: about 1 second; and
-- stop request to foreground-spawner exit: 47 seconds.
+- clean candidate build: 13 minutes 53 seconds;
+- fresh four-chain production capture: 2 hours 45 minutes 49 seconds;
+- spawn to `network is up and running`: 51 seconds;
+- fork verification and pre-upgrade verification: 40 seconds, including the 24-second
+  block-production observation;
+- strict ordered activation attempt: 8 minutes through both activations before a stale post-upgrade
+  `Honour` metadata assertion failed;
+- corrected explicit recovery checks: 9 seconds, with no upgrade resubmission;
+- configured post-upgrade verification: exactly 15 minutes;
+- runtime-log extraction and manual audit: about 3 seconds; and
+- stop request to foreground-spawner exit: 21 seconds.
 
 The candidates were built with `CARGO_BUILD_JOBS=2` and
 `WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. The local `polkadot` and
-`polkadot-omni-node` files matched the official PreviewNet `v20260826.201435` macOS ARM64 SHA-256
-hashes and both reported `1.24.2-weekly2026w34-eb220fa14e7`; successful live capture, spawn, and
-runtime activation established compatibility, so no binary pin changed.
+`polkadot-omni-node` files matched the published Polkadot SDK `polkadot-stable2606-1` macOS ARM64
+SHA-256 hashes `e6b3926024c86dddeb3f249942d17e7b8428b8c506919dff9cc9915d9e201a0e` and
+`a05f64056b45af27a3fdca9f2c90f5cf5c4f12c0621003cfa029617494e20104`; both reported
+`1.24.1-8ae9775dc43`.
 
 ## Latest validated results
 
-The run tested PR #2 commit `811338261f9f7fadb82b1273864ecb51e8f94dcb`. The fresh production
-capture recorded Relay `32741430`, Asset Hub `19950771`, People `9061825`, and Bulletin `1554250`.
+The run tested PR #2 commit `72aeee6e54c1f2357b8b2dbab44ce1dd2316d6e0`, containing PR #1 merge
+`bb7e123b7c5994fa73330556e53e7d88a306572e` and PR #1233
+`1a5410be8244b00fbcec68a5efc54b186220c5c5`. The fresh production capture recorded Relay
+`32766531`, Asset Hub `20018213`, People `9130240`, and Bulletin `1579329`.
 The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 The exact Asset Hub and People `2004000` candidate SHA-256 hashes were
-`7a39bcb6fe809bf81d644263a5ca870a5fa919fdc477f10228f0f235286a7f1e` and
-`fdd9c605680597f4e0b5c8e4ccc01d09d8b39321e2df773d9036b4690278292a`.
+`e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d` and
+`93badb05d46b54cbbbacc4475dbf7da74058014ac6ba15d6b5511803f451d1e6`.
 
-Late formatting-only base commits changed the reproducible candidate bytes after capture. The
-retained fresh snapshots were therefore restored to localhost and materialized into a separate
-candidate-specific artifact at the same recorded boundaries. Relay, Asset Hub, and People received
-the final authorizations; Bulletin uses its untouched fresh production snapshot because it has no
-candidate authorization. No production peer was contacted during materialization, and neither
-artifact-reuse control was enabled.
+Asset Hub and People activated successfully in the required order with recovery mode initially
+unset. Asset Hub's PGAS, `NextAssetId`, Revive, and pre-People subscription checks passed. After the
+People code activated, the strict invocation exposed a stale metadata assertion for the
+intentionally removed `Honour` pallet. The harness now requires the current pallet set and rejects
+`Honour`. After formatting and locked release checks passed, the documented
+`ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1` path verified the exact active code on both chains,
+completed the XCM/subscription checks, and exited zero without resubmitting either upgrade.
 
-Asset Hub and People both activated successfully in the required order on the normal strict path,
-with `ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES` unset. One shell attempt omitted Cargo from
-`PATH` and stopped before launching the client or changing chain state. The subsequent strict,
-chain-mutating invocation passed; the Bash-3.2-safe optional recovery scalar remained in place.
-
-The final 900-second verification advanced Relay `32741524 -> 32741674` (+150), Asset Hub
-`19951030 -> 19951480` (+450), People `9061916 -> 9062066` (+150), and Bulletin
-`1554341 -> 1554491` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
+The final 900-second verification advanced Relay `32766671 -> 32766821` (+150), Asset Hub
+`20018605 -> 20019055` (+450), People `9130635 -> 9131085` (+450), and Bulletin
+`1579466 -> 1579616` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
 upgraded collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People,
 the notifier whitelisting parachain `1000`, and the notifier offchain worker submitting
-`send_init_page`. The omni-node emitted recurring `AuthorityDiscoveryApi_authorities`
-compatibility messages both before and after the upgrades. All 60 error-level lines matched that
-one documented pattern; there was no unexpected error, panic, failed migration, runtime trap,
-fatal message, or essential-task failure.
+`send_init_page`. The post-checkpoint audit found zero error or severe-failure lines.
 
 The fresh production capture snapshot SHA-256 hashes were Relay
-`882c8f94e13a8f3ac830916a27cb88b0e5f8b7c2f161e99663e27aa0084a5b10`, Asset Hub
-`88c456decb4197abc707d8bfbe64173096b2a4dec4cc28f7d771ab88f06ff135`, People
-`aa46ea62679405bdf97ef0f9e5d42d93c8de21cb17e47c425f2fb1be122b861b`, and Bulletin
-`2f30d63796b09448321c8f87910c62efe10589d9c085a3f7d18a352183ca57d9`. The final
-candidate-specific artifact snapshot hashes were Relay
-`6ffcfc0d0228086c363df3368f1d489392742191f417fc85baae33e64ea33aed`, Asset Hub
-`b9d7d0fc30c0c862dea667dbbbe7e9deb9e71289ad00f127a4bb9e5f250125f3`, People
-`cb440ff959c66e4bcee749ff49089fa1366962999bbe32ff8c0a41444d80b986`, and the same untouched
-Bulletin hash above.
+`f4fa24062144c6e3a984dd213a690e5acba261c80e79509fdfc912edaacbb6cd`, Asset Hub
+`cb2623ed9835487998aa2a36b0b1a2b61a08f415baffc09589b060a5a2823d32`, People
+`c8dbc7dd83f4cc3a10e27dd6fc8558b19c88f8815f62e2756b300c3fbc3c7a9e`, and Bulletin
+`ef5c97254b34a641824b60e6ce80940f7f18b83c558383808e3b953f1715b2f7`.
 
-After `make stop`, all 42 captured related PIDs had exited, all 36 recorded RPC, P2P, and metrics
-ports had no listeners, and no artifact-related process remained. The retained local validation
+After `make stop`, the foreground spawner exited zero, every related process exited, every captured
+RPC, P2P, and metrics port had no listener, and `stop.txt` was absent. The retained local validation
 artifact is
-`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260827-007`; it uses 25
-GiB, with 216 GiB free after shutdown. The original fresh production capture is retained separately
-under the same prefix ending in `-006`.
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260829-001`; it uses 26
+GiB. Both candidate WASMs remain under its `candidates` directory, and 250 GiB was free after the
+post-run Cargo cleanup.
 
 ## Troubleshooting
 

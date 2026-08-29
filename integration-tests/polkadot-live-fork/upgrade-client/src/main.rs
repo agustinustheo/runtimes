@@ -108,13 +108,15 @@ fn verify_people_metadata(client: &OnlineClient<PolkadotConfig>) -> Result<()> {
 		"Members",
 		"Coinage",
 		"MembersNotifier",
-		"Honour",
 		"Parameters",
 		"NetworkSuffix",
 	] {
 		if client.metadata().pallet_by_name(pallet).is_none() {
 			bail!("People candidate metadata is missing {pallet}");
 		}
+	}
+	if client.metadata().pallet_by_name("Honour").is_some() {
+		bail!("People candidate metadata still contains removed Honour pallet");
 	}
 	Ok(())
 }
