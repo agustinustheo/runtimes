@@ -27,7 +27,6 @@
 //! * [`indiv_pallet_people`] is the personhood registry proper: one ring per generation of proven
 //!   people, plus context-scoped aliases (`PersonalAlias`) and the `PersonalIdentity` origin.
 //! * [`indiv_pallet_people_lite`] is the weaker, device-attestation based flavour of personhood.
-//! * [`indiv_pallet_honour`] lets people vote on calls with their personhood weight.
 //! * [`indiv_pallet_resources`] rations the off-chain resources (statement store, notifications,
 //!   long-term storage) a person may consume.
 //! * [`indiv_pallet_coinage`] implements bearer-instrument "coins" backed by a stablecoin, held by
@@ -60,13 +59,17 @@ use indiv_support::{
 	},
 	utils::TypedGetToGet,
 };
-use polkadot_runtime_constants::{system_parachain::ASSET_HUB_ID, time::MINUTES as RC_MINUTES};
+use polkadot_runtime_constants::system_parachain::ASSET_HUB_ID;
 use scale_info::TypeInfo;
 #[cfg(feature = "runtime-benchmarks")]
 use sp_runtime::{traits::AccountIdConversion, MultiSignature};
 use sp_runtime::{
 	traits::{ConstI8, ConstU16},
 	DispatchError, DispatchResult,
+};
+use sp_statement_store::StatementAllowance;
+use system_parachains_constants::polkadot::{
+	consensus::elastic_scaling::MINUTES as PARA_MINUTES, INDIVIDUALITY_NETWORK_SUFFIX,
 };
 // NOTE: deliberately not `xcm::latest::prelude::*` — its `Assets` would shadow the `Assets` pallet
 // this module configures.
@@ -98,7 +101,7 @@ pub type RuntimeClock = benchmark_utils::BenchmarkClock;
 
 parameter_types! {
 	pub DefaultNetworkSuffix: indiv_support::context::ProductContextNetworkSuffix =
-		b"polkadot".to_vec().try_into().expect("default network suffix fits");
+		INDIVIDUALITY_NETWORK_SUFFIX.to_vec().try_into().expect("default network suffix fits");
 
 	/// Largest ring exponent usable by `Flexible` collections in `pallet-members`.
 	pub const MembersFlexibleRingExponent: RingExponent = RingExponent::R2e9;
@@ -170,7 +173,7 @@ impl indiv_pallet_members::Config for Runtime {
 	type OldRootRetentionDuration = ConstU64<600>;
 	type OnRingRootChange = MembersNotifier;
 	type OffchainWorkerInterval = ConstU32<1>;
-	type ManagerOrigin = RootOrFellows;
+	type ManagerOrigin = IndividualityManagerOrigin;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::MembersBenchHelper;
 }
@@ -199,9 +202,9 @@ impl indiv_pallet_people::Config for Runtime {
 	type CollectionOwner = PeopleCollectionOwner;
 	type AccountContexts = AccountContexts;
 	type OnboardingQueuePageSize = ConstU32<30>;
-	type StaleAliasCleanupInterval = ConstU32<{ 5 * RC_MINUTES }>;
+	type StaleAliasCleanupInterval = ConstU32<{ 5 * PARA_MINUTES }>;
 	type SelfInclusionDelay = SelfInclusionDelayValue;
-	type ManagerOrigin = RootOrFellows;
+	type ManagerOrigin = EnsureRoot<AccountId>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::PeopleBenchHelper;
 }
@@ -212,7 +215,7 @@ impl indiv_pallet_people_lite::Config for Runtime {
 	type PotId = LitePeoplePotId;
 	type RegistrationFee = crate::parameters::LitePersonRegistrationFee;
 	type Suffix = NetworkSuffix;
-	type AttestationAllowanceManager = RootOrFellows;
+	type AttestationAllowanceManager = IndividualityManagerOrigin;
 	type MemberService = Members;
 	type CollectionOwner = LitePeopleCollectionOwner;
 	type LiteRingExponent = LitePeopleRingExponent;
@@ -226,8 +229,8 @@ impl indiv_pallet_people_lite::Config for Runtime {
 
 impl indiv_pallet_dummy_dim::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_dummy_dim::WeightInfo<Runtime>;
-	type UpdateOrigin = RootOrFellows;
-	type MaxPersonBatchSize = ConstU32<1000>;
+	type UpdateOrigin = EnsureRoot<AccountId>;
+	type MaxPersonBatchSize = ConstU32<100>;
 	type People = People;
 }
 
@@ -236,26 +239,15 @@ parameter_types! {
 }
 
 parameter_types! {
-	pub const HonourPointFreezeDuration: indiv_pallet_honour::Seconds = 24 * 60 * 60;
-	pub const HonourCallMortality: indiv_pallet_honour::Seconds = 5 * 60;
-}
-
-impl indiv_pallet_honour::Config for Runtime {
-	type WeightInfo = weights::indiv_pallet_honour::WeightInfo<Runtime>;
-	type MemberService = Members;
-	type Clock = Timestamp;
-	type PointFreezeDuration = HonourPointFreezeDuration;
-	type CallMortality = HonourCallMortality;
-	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = benchmark_utils::HonourBenchmarkHelper;
-}
-
-parameter_types! {
 	pub const MaxUsernameLength: u32 = 32;
 	pub const MinUsernameLength: u32 = 6;
 	pub const PersonAuthDuration: u32 = 2 * 24 * 60 * 60; // 2 days
 	pub const MinPersonAuthUpdateInterval: u32 = 24 * 60 * 60; // 1 day
 	pub const MaxReservationQueueLength: u32 = 10;
+	pub const AccountsApiAllowance: StatementAllowance =
+		StatementAllowance { max_size: 500 * 1024, max_count: 2 };
+	pub const NotificationAllowance: StatementAllowance =
+		StatementAllowance { max_size: 10 * 1024, max_count: 1 };
 }
 
 impl indiv_pallet_resources::Config for Runtime {
@@ -264,16 +256,16 @@ impl indiv_pallet_resources::Config for Runtime {
 	type MemberService = Members;
 	type MinUsernameLength = MinUsernameLength;
 	type PersonAuthDuration = PersonAuthDuration;
-	type AccountsApiAllowance = crate::parameters::AccountsApiAllowance;
+	type AccountsApiAllowance = AccountsApiAllowance;
 	type StmtStoreSlotsPerPeriod = crate::parameters::StmtStoreSlotsPerPeriod;
 	type LiteStmtStoreSlotsPerPeriod = crate::parameters::LiteStmtStoreSlotsPerPeriod;
 	type StmtStoreCleanupLimit = crate::parameters::StmtStoreCleanupLimit;
 	type StmtStoreReplacementCooldown = crate::parameters::StmtStoreReplacementCooldown;
 	type StmtStoreGraceWindow = crate::parameters::StmtStoreGraceWindow;
-	type NotificationAllowance = crate::parameters::NotificationAllowance;
+	type NotificationAllowance = NotificationAllowance;
 	type NotificationSlotsPerPeriod = crate::parameters::NotificationSlotsPerPeriod;
 	type LiteNotificationSlotsPerPeriod = crate::parameters::LiteNotificationSlotsPerPeriod;
-	type NotificationPeriodDuration = crate::parameters::NotificationPeriodDuration;
+	type NotificationPeriodDuration = ConstU32<{ 24 * 60 * 60 }>;
 	type OffchainWorkerInterval = ConstU32<1>;
 	type MinPersonAuthUpdateInterval = MinPersonAuthUpdateInterval;
 	type EnsurePerson = indiv_pallet_people::EnsurePersonalAliasInContext<Runtime>;
@@ -283,9 +275,10 @@ impl indiv_pallet_resources::Config for Runtime {
 	type LitePersonStatementLimit = crate::parameters::LitePersonStatementLimit;
 	type PersonStatementLimit = crate::parameters::PersonStatementLimit;
 	type MaxReservationQueueLength = MaxReservationQueueLength;
-	type ManagerOrigin = RootOrFellows;
-	type LongTermStoragePeriodDuration = crate::parameters::LongTermStoragePeriodDuration;
-	type LongTermStorageGraceWindow = crate::parameters::LongTermStorageGraceWindow;
+	type ManagerOrigin = IndividualityManagerOrigin;
+	type LongTermStoragePeriodDuration = ConstU32<{ 14 * 24 * 60 * 60 }>; // 2 weeks
+																	   // Long-term storage grace window, kept smaller than the storage period.
+	type LongTermStorageGraceWindow = ConstU32<{ 60 * 60 }>; // 1 hour
 	type LongTermStorageClaimsPerPeriod = crate::parameters::LongTermStorageClaimsPerPeriod;
 	type LongTermStorageAllowanceForPeople = crate::parameters::LongTermStorageAllowanceForPeople;
 	type LongTermStorageAllowanceForLitePeople =
@@ -320,10 +313,7 @@ impl indiv_pallet_coinage::Config for Runtime {
 	type PaidUnloadTokenRingExponent = PaidUnloadTokenRingExponent;
 	type NativeFungible = Balances;
 	type Fungibles = NativeAndAssets;
-	type AdminOrigin = EitherOfDiverse<
-		RootOrFellows,
-		EnsureXcm<IsVoiceOfBody<AssetHubLocation, TechnicalMaintenanceBodyId>>,
-	>;
+	type AdminOrigin = IndividualityManagerOrigin;
 	type SponsorOrigin = frame_system::EnsureSigned<AccountId>;
 	type EnablePermissionless = ConstBool<true>;
 	type LoadDeposit = CoinageLoadDeposit;
@@ -335,7 +325,7 @@ impl indiv_pallet_coinage::Config for Runtime {
 	>;
 	type MinimumExponent = ConstI8<0>;
 	type MaximumExponent = ConstI8<14>;
-	type MinimumExponentForOutputUnloadFee = ConstI8<0>;
+	type MinimumExponentForOutputUnloadFee = ConstI8<4>;
 	type MaximumAge = ConstU16<16>;
 	type MaxSplitOutputs = ConstU32<32>;
 	type MaxConsolidation = ConstU32<64>;
@@ -423,7 +413,7 @@ impl indiv_pallet_members_notifier::Config for Runtime {
 	type WeightInfo = weights::indiv_pallet_members_notifier::WeightInfo<Runtime>;
 	type XcmRouter = xcm_config::XcmRouter;
 	type ChannelInfo = ParachainSystem;
-	type ManageOrigin = RootOrFellows;
+	type ManageOrigin = EnsureRoot<AccountId>;
 	type EnsureSubscriberOrigin = EnsureSiblingParachain;
 	type Crypto = BandersnatchVrfVerifiable;
 	type RingRootsProvider = Members;
@@ -710,64 +700,6 @@ pub mod benchmark_utils {
 		}
 	}
 
-	pub struct HonourBenchmarkHelper;
-	impl indiv_pallet_honour::benchmarking::BenchmarkHelper<Runtime> for HonourBenchmarkHelper {
-		fn set_time(now: indiv_pallet_honour::Seconds) {
-			pallet_timestamp::Now::<Runtime>::put(now.saturating_mul(1_000));
-		}
-
-		fn seed_and_create_proof(
-			vote: &indiv_pallet_honour::VoteData,
-			message: &[u8],
-		) -> indiv_pallet_honour::RingProofOf<Runtime> {
-			let ring_exponent = <Runtime as indiv_pallet_people::Config>::RingExponent::get();
-			let ring_index: RingIndex = 0;
-
-			// Build a one-member people ring in the member service. Mirrors the targeted setup used
-			// by `indiv_pallet_people`'s own proof benchmarks rather than the full
-			// `process_maintenance` sweep, which is heavier and runs once per benchmark repeat.
-			Members::create_collection(
-				PeopleCollectionOwner::get(),
-				indiv_pallet_people::PEOPLE_MEMBER_IDENTIFIER,
-				1,
-				RingMode::Flexible,
-				ring_exponent,
-				None,
-			)
-			.expect("benchmark: people collection must be created");
-
-			let secret = BandersnatchVrfVerifiable::new_secret(sp_crypto_hashing::twox_256(
-				b"honour-bench-voter",
-			));
-			let member = BandersnatchVrfVerifiable::member_from_secret(&secret);
-
-			Members::add_members(indiv_pallet_people::PEOPLE_MEMBER_IDENTIFIER, vec![member])
-				.expect("benchmark: ring member must be added");
-			Members::initialize_chunks(ring_exponent);
-			Members::onboard_all_and_build_ring(
-				indiv_pallet_people::PEOPLE_MEMBER_IDENTIFIER,
-				ring_index,
-			)
-			.expect("benchmark: people ring must be built");
-
-			let ring_members =
-				Members::ring_members(indiv_pallet_people::PEOPLE_MEMBER_IDENTIFIER, ring_index);
-			let domain: RingDomainSize =
-				ring_exponent.try_into().expect("people ring exponent maps to a domain size");
-			let commitment =
-				BandersnatchVrfVerifiable::open(domain, &member, ring_members.into_iter())
-					.expect("benchmark: commitment must open");
-
-			let contexts = vote.get_contexts();
-			let contexts: Vec<&[u8]> = contexts.iter().map(|c| &c[..]).collect();
-			let (proof, _) = BandersnatchVrfVerifiable::create_multi_context(
-				commitment, &secret, &contexts, message,
-			)
-			.expect("benchmark: proof creation must succeed");
-			proof
-		}
-	}
-
 	pub struct ResourcesBenchHelper;
 	impl indiv_pallet_resources::benchmarking::BenchmarkHelper<Runtime> for ResourcesBenchHelper {
 		fn set_time(now: core::time::Duration) {
@@ -921,8 +853,14 @@ pub mod benchmark_utils {
 		}
 
 		fn fund_account(who: &AccountId, amount: Balance) {
-			<AssetsWithHolder as Mutate<_>>::mint_into(HollarLocation::get(), who, amount)
-				.expect("benchmark: account must be fundable");
+			let fee_reserve =
+				Coinage::get_paid_unload_token_fee_quote_in_asset(0, 1).unwrap_or_default();
+			<AssetsWithHolder as Mutate<_>>::mint_into(
+				HollarLocation::get(),
+				who,
+				amount.saturating_add(fee_reserve),
+			)
+			.expect("benchmark: account must be fundable");
 		}
 
 		fn create_extra_asset(seed: u32, who: &AccountId) -> Location {
@@ -954,7 +892,46 @@ pub mod benchmark_utils {
 			pallet_timestamp::Now::<Runtime>::put(now.as_millis() as u64);
 		}
 
-		fn setup_fee_conversion() {}
+		fn setup_fee_conversion() {
+			use alloc::boxed::Box;
+			use frame_support::traits::fungible::Mutate as _;
+
+			let native = xcm_config::RelayLocation::get();
+			let asset = HollarLocation::get();
+			if pallet_asset_conversion::Pools::<Runtime>::contains_key((
+				native.clone(),
+				asset.clone(),
+			)) {
+				return;
+			}
+
+			let native_liquidity = 1_000 * UNITS;
+			let asset_liquidity = 1_000 * HOLLAR_UNITS;
+			let provider: AccountId = [42u8; 32].into();
+
+			Balances::mint_into(&provider, native_liquidity.saturating_mul(2))
+				.expect("benchmark: liquidity provider must be fundable with DOT");
+			Self::fund_account(&provider, asset_liquidity.saturating_mul(2));
+
+			let origin = RuntimeOrigin::signed(provider.clone());
+			AssetConversion::create_pool(
+				origin.clone(),
+				Box::new(native.clone()),
+				Box::new(asset.clone()),
+			)
+			.expect("benchmark: fee conversion pool must be creatable");
+			AssetConversion::add_liquidity(
+				origin,
+				Box::new(native),
+				Box::new(asset),
+				native_liquidity,
+				asset_liquidity,
+				1,
+				1,
+				provider,
+			)
+			.expect("benchmark: fee conversion pool must accept liquidity");
+		}
 
 		fn create_people_proof(
 			context: &[u8],

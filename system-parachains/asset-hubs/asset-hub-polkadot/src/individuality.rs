@@ -46,13 +46,11 @@ use indiv_support::{
 };
 use polkadot_runtime_constants::system_parachain::{ASSET_HUB_ID, PEOPLE_ID};
 use sp_runtime::traits::AccountIdConversion;
+use system_parachains_constants::polkadot::INDIVIDUALITY_NETWORK_SUFFIX;
 
-/// Root or Technical Fellowship voice
-pub type RootOrFellows =
-	EitherOfDiverse<EnsureRoot<AccountId>, EnsureXcm<IsFellowshipVoice<FellowshipLocation>>>;
-
-/// The full administration origin shared by Individuality pallet managers and dynamic parameters.
-pub type RootOrFellowsOrTechnicalMaintenance = EitherOfDiverse<RootOrFellows, TechnicalMaintenance>;
+/// Root or the whitelisted caller origin.
+// TODO: Add the technical maintenance origin after #1236 is merged.
+pub type RootOrWhitelist = EitherOfDiverse<EnsureRoot<AccountId>, WhitelistedCaller>;
 
 /// PGAS, the non-transferable gas allowance a proven person may claim.
 ///
@@ -77,7 +75,7 @@ parameter_types! {
 	/// Ring exponent of the lite people collection on People Polkadot.
 	pub const PeopleLiteRingExponent: RingExponent = RingExponent::R2e9;
 	pub DefaultNetworkSuffix: indiv_support::context::ProductContextNetworkSuffix =
-		b"polkadot".to_vec().try_into().expect("default network suffix fits");
+		INDIVIDUALITY_NETWORK_SUFFIX.to_vec().try_into().expect("default network suffix fits");
 }
 
 impl indiv_pallet_network_suffix::Config for Runtime {
@@ -112,7 +110,7 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type RingRootsNotifier = RingRootsNotifierEndpoint;
 	type SelfParaId = MembersSubscriberSelfParaId;
 	type MaxMissingRootsPerCollection = ConstU32<255>;
-	type MaxDeletedRingsPerCollection = MaxDeletedRingsPerCollection;
+	type MaxDeletedRingsPerCollection = ConstU32<100>;
 	type MaxGapScanPerBatch = ConstU32<32>;
 	type PurgePageSize = ConstU32<100>;
 	type EnsureNotifierOrigin = EnsureNotifierSibling;
@@ -127,11 +125,6 @@ impl indiv_pallet_members_subscriber::Config for Runtime {
 	type OldRootRetentionDuration = ConstU64<600>;
 	type OffchainWorkerInterval = ConstU32<3>;
 }
-
-pub type MaxDeletedRingsPerCollection = BenchmarkMax<
-	AtMost<AtLeastOne<dynamic_params::individuality::MaxDeletedRingsPerCollection>, ConstU32<100>>,
-	ConstU32<100>,
->;
 
 /// Adapts the runtime's required alias fee to the alias-accounts pallet configuration.
 pub struct AliasFee;
@@ -262,8 +255,8 @@ impl indiv_pallet_dotns_gateway::Config for Runtime {
 	type MaxValiditySeconds = dynamic_params::individuality::DotnsMaxValiditySeconds;
 	type MaxFutureSkewSeconds = dynamic_params::individuality::DotnsMaxFutureSkewSeconds;
 	type UnixTime = Timestamp;
-	type AttestationAllowanceManager = RootOrFellowsOrTechnicalMaintenance;
-	type DispatcherAddressManager = RootOrFellowsOrTechnicalMaintenance;
+	type AttestationAllowanceManager = RootOrWhitelist;
+	type DispatcherAddressManager = RootOrWhitelist;
 	type AttestationSignature = Signature;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::DotnsGatewayBenchHelper;
