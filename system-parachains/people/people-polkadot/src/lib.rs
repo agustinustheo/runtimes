@@ -63,9 +63,6 @@ use parachains_common::{
 };
 
 use polkadot_runtime_common::{BlockHashCount, SlowAdjustingFeeUpdate};
-use polkadot_runtime_constants::{
-	fellowship::IsFellowshipVoice, xcm::body::TECHNICAL_MAINTENANCE_INDEX,
-};
 use sp_api::impl_runtime_apis;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -101,8 +98,8 @@ use xcm::{
 	VersionedXcm,
 };
 use xcm_config::{
-	AssetHubLocation, FellowshipLocation, PriceForSiblingParachainDelivery, RelayChainLocation,
-	StakingPot, XcmConfig, XcmOriginToTransactDispatchOrigin,
+	AssetHubLocation, PriceForSiblingParachainDelivery, RelayChainLocation, StakingPot, XcmConfig,
+	XcmOriginToTransactDispatchOrigin,
 };
 use xcm_runtime_apis::{
 	dry_run::{CallDryRunEffects, Error as XcmDryRunApiError, XcmDryRunEffects},
@@ -151,7 +148,6 @@ pub type TxExtensionV1 = cumulus_pallet_weight_reclaim::StorageWeightReclaim<
 			indiv_pallet_members::extension::AsMember<Runtime>,
 			indiv_pallet_coinage::extension::AsCoinage<Runtime>,
 			indiv_pallet_resources::extension::AsResources<Runtime>,
-			indiv_pallet_honour::extension::VoterAuth<Runtime>,
 			frame_system::AuthorizeCall<Runtime>,
 		),
 		// General checks and operations.
@@ -416,9 +412,9 @@ impl parachain_info::Config for Runtime {}
 
 impl cumulus_pallet_aura_ext::Config for Runtime {}
 
-/// Privileged origin that represents Root or Fellows pluralistic body.
-pub type RootOrFellows =
-	EitherOfDiverse<EnsureRoot<AccountId>, EnsureXcm<IsFellowshipVoice<FellowshipLocation>>>;
+/// Root access for Individuality administration.
+// TODO: Accept Asset Hub's technical maintenance XCM voice after #1236 is merged.
+pub type IndividualityManagerOrigin = EnsureRoot<AccountId>;
 
 impl cumulus_pallet_xcmp_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
@@ -430,7 +426,7 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
 	// need to set the page size larger than that until we reduce the channel size on-chain.
 	type MaxPageSize = ConstU32<{ 103 * 1024 }>;
 	type MaxInboundSuspended = sp_core::ConstU32<1_000>;
-	type ControllerOrigin = RootOrFellows;
+	type ControllerOrigin = EnsureRoot<AccountId>;
 	type ControllerOriginConverter = XcmOriginToTransactDispatchOrigin;
 	type PriceForSiblingDelivery = PriceForSiblingParachainDelivery;
 	type WeightInfo = weights::cumulus_pallet_xcmp_queue::WeightInfo<Runtime>;
@@ -474,8 +470,6 @@ parameter_types! {
 	pub const SessionLength: BlockNumber = 6 * HOURS;
 	// StakingAdmin pluralistic body.
 	pub const StakingAdminBodyId: BodyId = BodyId::Defense;
-	/// TechnicalMaintenance pluralistic body (governance track on Asset Hub).
-	pub const TechnicalMaintenanceBodyId: BodyId = BodyId::Index(TECHNICAL_MAINTENANCE_INDEX);
 }
 
 /// We allow Root and the `StakingAdmin` to execute privileged collator selection operations.
@@ -731,7 +725,7 @@ impl pallet_assets::Config<PoolAssetsInstance> for Runtime {
 	type CreateOrigin = AsEnsureOriginWithArg<NeverEnsureOrigin<AccountId>>;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type AssetDeposit = ConstU128<0>;
-	type AssetAccountDeposit = ConstU128<0>;
+	type AssetAccountDeposit = assets::AssetAccountDeposit;
 	type MetadataDepositBase = ConstU128<0>;
 	type MetadataDepositPerByte = ConstU128<0>;
 	type ApprovalDeposit = ExistentialDeposit;
@@ -873,7 +867,7 @@ construct_runtime!(
 		Coinage: indiv_pallet_coinage = 68,
 		MembersNotifier: indiv_pallet_members_notifier = 69,
 		// 70: never used.
-		Honour: indiv_pallet_honour = 71,
+		// 71: never used.
 		Parameters: pallet_parameters = 73,
 		// 74: never used.
 		NetworkSuffix: indiv_pallet_network_suffix = 75,
@@ -929,7 +923,6 @@ mod benches {
 		[indiv_pallet_chunks_manager, ChunksManager]
 		[indiv_pallet_coinage, Coinage]
 		[indiv_pallet_dummy_dim, DummyDim]
-		[indiv_pallet_honour, Honour]
 		[indiv_pallet_members, Members]
 		[indiv_pallet_members_notifier, MembersNotifier]
 		[indiv_pallet_origin_restriction, OriginRestriction]

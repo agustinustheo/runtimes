@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Asset Hub Polkadot: add support for multiple independent PSMs ([#1252](https://github.com/polkadot-fellows/runtimes/pull/1252), integrates [paritytech/polkadot-sdk#12952](https://github.com/paritytech/polkadot-sdk/pull/12952)).
 - All system parachains: add the `cumulus_pallet_parachain_system::Config::SchedulingSignatureVerifier` associated type (set to `()`) and implement `RelayParentOffsetApi` v2 (`max_claim_queue_offset`); preparation for candidate-descriptor v3, with V3 scheduling left disabled ([#1223](https://github.com/polkadot-fellows/runtimes/pull/1223), integrates [paritytech/polkadot-sdk#10742](https://github.com/paritytech/polkadot-sdk/pull/10742)).
 
-- People Polkadot: add the Individuality pallets: `pallet-chunks-manager`, `pallet-coinage`, `pallet-dummy-dim`, `pallet-honour`, `pallet-members`, `pallet-members-notifier`, `pallet-network-suffix`, `pallet-origin-restriction`, `pallet-parameters`, `pallet-people`, `pallet-people-lite`, `pallet-relay-randomness`, `pallet-resources`, and `pallet-verify-signature` ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
+- People Polkadot: add the Individuality pallets: `pallet-chunks-manager`, `pallet-coinage`, `pallet-dummy-dim`, `pallet-members`, `pallet-members-notifier`, `pallet-network-suffix`, `pallet-origin-restriction`, `pallet-parameters`, `pallet-people`, `pallet-people-lite`, `pallet-relay-randomness`, `pallet-resources`, and `pallet-verify-signature` ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
 - Asset Hub Polkadot: add the Individuality pallets: `pallet-alias-accounts`, `pallet-assets-freezer`, `pallet-assets-holder`, `pallet-dotns-gateway`, `pallet-members-subscriber`, `pallet-network-suffix`, `pallet-origin-restriction`, `pallet-pgas`, and `pallet-pgas-allowance` ([#1233](https://github.com/polkadot-fellows/runtimes/pull/1233)).
 
 ### Changed
@@ -67,6 +67,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PAH & KAH: `pallet_revive::EthExtra` supports multi-version Ethereum extensions ([#1159](https://github.com/polkadot-fellows/runtimes/pull/1159))
 - Bridge Hub Polkadot: expose Snowbridge `InboundQueueV2Api::is_message_relayed` runtime API ([#1159](https://github.com/polkadot-fellows/runtimes/pull/1159))
 - PAH & KAH: add `PrevalidateAttests` transaction extension to the `TxExtension` ([#1156](https://github.com/polkadot-fellows/runtimes/pull/1156))
+
+### Removed
+
+- Polkadot, Asset Hub Polkadot & Asset Hub Kusama: remove the now-complete `pallet-state-trie-migration` and purge its leftover on-chain storage via a `RemovePallet` migration ([#905](https://github.com/polkadot-fellows/runtimes/issues/905)).
 
 ### Changed
 

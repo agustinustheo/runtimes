@@ -90,8 +90,7 @@ use cumulus_pallet_parachain_system::{RelayNumberMonotonicallyIncreases, Relaych
 use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
 use frame_support::traits::EnsureOrigin;
 use governance::{
-	pallet_custom_origins, FellowshipAdmin, GeneralAdmin, ProsperityAdmin, StakingAdmin,
-	TechnicalMaintenance, Treasurer, TreasurySpender,
+	pallet_custom_origins, FellowshipAdmin, GeneralAdmin, StakingAdmin, Treasurer, TreasurySpender,
 };
 use polkadot_core_primitives::AccountIndex;
 use polkadot_runtime_constants::time::{
@@ -125,7 +124,7 @@ use frame_support::{
 	dynamic_params::{dynamic_pallet_params, dynamic_params},
 	genesis_builder_helper::{build_state, get_preset},
 	migrations::ForceUnstuckOnFailedMigration,
-	ord_parameter_types, parameter_types,
+	parameter_types,
 	traits::{
 		fungible::{self, HoldConsideration},
 		fungibles,
@@ -140,7 +139,7 @@ use frame_support::{
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	pallet_prelude::BlockNumberFor,
-	EnsureRoot, EnsureRootWithSuccess, EnsureSigned, EnsureSignedBy,
+	EnsureRoot, EnsureRootWithSuccess, EnsureSigned,
 };
 use pallet_asset_conversion_precompiles::AssetConversion as AssetConversionPrecompile;
 use pallet_assets_precompiles::{ForeignAssetId, ForeignIdConfig, InlineIdConfig, ERC20};
@@ -160,7 +159,8 @@ use system_parachains_constants::{
 	polkadot::{
 		consensus::{
 			elastic_scaling::{
-				BLOCK_PROCESSING_VELOCITY, RELAY_PARENT_OFFSET, UNINCLUDED_SEGMENT_CAPACITY,
+				BLOCK_PROCESSING_VELOCITY, HOURS as PARA_HOURS, RELAY_PARENT_OFFSET,
+				UNINCLUDED_SEGMENT_CAPACITY,
 			},
 			RELAY_CHAIN_SLOT_DURATION_MILLIS,
 		},
@@ -1363,8 +1363,7 @@ impl frame_support::traits::EnsureOriginWithArg<RuntimeOrigin, RuntimeParameters
 			StakingElection(_) =>
 				EitherOf::<EnsureRoot<AccountId>, StakingAdmin>::ensure_origin(origin.clone()),
 			Individuality(_) =>
-				individuality::RootOrFellowsOrTechnicalMaintenance::ensure_origin(origin.clone())
-					.map(|_| ()),
+				individuality::RootOrWhitelist::ensure_origin(origin.clone()).map(|_| ()),
 			// technical params, can be controlled by the fellowship voice.
 			Scheduler(_) | MessageQueue(_) => EitherOfDiverse::<
 				EnsureRoot<AccountId>,
@@ -1504,10 +1503,7 @@ pub mod dynamic_params {
 		pub static AliasFee: Balance = UNITS / 4;
 		/// Block interval for the alias-account stale-mapping sweep.
 		#[codec(index = 12)]
-		pub static StaleAliasSweepInterval: BlockNumber = HOURS;
-		/// Maximum deleted rings tracked for one collection.
-		#[codec(index = 13)]
-		pub static MaxDeletedRingsPerCollection: u32 = 100;
+		pub static StaleAliasSweepInterval: BlockNumber = PARA_HOURS;
 		/// Maximum aliases processed by one stale-alias sweep call.
 		#[codec(index = 14)]
 		pub static MaxStaleAliasBatch: u32 = 32;
@@ -1749,9 +1745,6 @@ construct_runtime!(
 		ChildBounties: pallet_child_bounties = 66,
 		AssetRate: pallet_asset_rate = 67,
 		MultiAssetBounties: pallet_multi_asset_bounties = 68,
-
-		// State trie migration pallet, only temporary.
-		StateTrieMigration: pallet_state_trie_migration = 70,
 
 		// Staking in the 80s
 		NominationPools: pallet_nomination_pools = 80,
@@ -3056,39 +3049,6 @@ cumulus_pallet_parachain_system::register_validate_block! {
 	BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>,
 }
 
-parameter_types! {
-	// The deposit configuration for the singed migration. Specially if you want to allow any signed account to do the migration (see `SignedFilter`, these deposits should be high)
-	pub const MigrationSignedDepositPerItem: Balance = CENTS;
-	pub const MigrationSignedDepositBase: Balance = 2_000 * CENTS;
-	pub const MigrationMaxKeyLen: u32 = 512;
-}
-
-impl pallet_state_trie_migration::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type RuntimeHoldReason = RuntimeHoldReason;
-	type SignedDepositPerItem = MigrationSignedDepositPerItem;
-	type SignedDepositBase = MigrationSignedDepositBase;
-	// An origin that can control the whole pallet: Should be a Fellowship member or the controller
-	// of the migration.
-	type ControlOrigin = EitherOfDiverse<
-		EnsureXcm<IsFellowshipVoice<FellowshipLocation>>,
-		EnsureSignedBy<MigControllerRoot, AccountId>,
-	>;
-	type SignedFilter = EnsureSignedBy<MigController, AccountId>;
-
-	// Replace this with weight based on your runtime.
-	type WeightInfo = pallet_state_trie_migration::weights::SubstrateWeight<Runtime>;
-
-	type MaxKeyLen = MigrationMaxKeyLen;
-}
-// Statemint State Migration Controller account controlled by parity.io. Can trigger migration.
-// See bot code https://github.com/paritytech/polkadot-scripts/blob/master/src/services/state_trie_migration.ts
-ord_parameter_types! {
-	pub const MigController: AccountId = AccountId::from(hex_literal::hex!("8458ed39dc4b6f6c7255f7bc42be50c2967db126357c999d44e12ca7ac80dc52"));
-	pub const MigControllerRoot: AccountId = AccountId::from(hex_literal::hex!("8458ed39dc4b6f6c7255f7bc42be50c2967db126357c999d44e12ca7ac80dc52"));
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -3212,15 +3172,6 @@ mod tests {
 			bp_asset_hub_polkadot::CreateForeignAssetDeposit::get(),
 			ForeignAssetsAssetDeposit::get()
 		);
-	}
-
-	#[test]
-	fn ensure_key_ss58() {
-		use frame_support::traits::SortedMembers;
-		use sp_core::crypto::Ss58Codec;
-		let acc =
-			AccountId::from_ss58check("5F4EbSkZz18X36xhbsjvDNs6NuZ82HyYtq5UiJ1h9SBHJXZD").unwrap();
-		assert_eq!(acc, MigController::sorted_members()[0]);
 	}
 
 	#[test]
