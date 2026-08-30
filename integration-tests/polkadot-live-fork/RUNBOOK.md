@@ -224,21 +224,19 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The latest validation completed on 2026-08-29 UTC. It performed a fresh production synchronization
+The latest validation completed on 2026-08-30 UTC. It performed a fresh production synchronization
 for Relay, Asset Hub, People, and Bulletin with both artifact-reuse variables explicitly unset. Its
 measured timings were:
 
 - clean candidate build: 13 minutes 53 seconds;
-- fresh four-chain production capture: 2 hours 45 minutes 49 seconds;
+- fresh four-chain production capture: 3 hours 54 minutes 39 seconds;
 - spawn to `network is up and running`: 51 seconds;
-- fork verification and pre-upgrade verification: 40 seconds, including the 24-second
+- fork verification, pre-upgrade verification, and log checkpoint: 39 seconds, including the 24-second
   block-production observation;
-- strict ordered activation attempt: 8 minutes through both activations before a stale post-upgrade
-  `Honour` metadata assertion failed;
-- corrected explicit recovery checks: 9 seconds, with no upgrade resubmission;
+- strict ordered Asset Hub then People activation: 8 minutes 21 seconds, with recovery mode unset;
 - configured post-upgrade verification: exactly 15 minutes;
-- runtime-log extraction and manual audit: about 3 seconds; and
-- stop request to foreground-spawner exit: 21 seconds.
+- runtime-log extraction and manual audit: about 1 second; and
+- stop request to foreground-spawner exit: 48 seconds.
 
 The candidates were built with `CARGO_BUILD_JOBS=2` and
 `WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. The local `polkadot` and
@@ -249,41 +247,39 @@ SHA-256 hashes `e6b3926024c86dddeb3f249942d17e7b8428b8c506919dff9cc9915d9e201a0e
 
 ## Latest validated results
 
-The run tested PR #2 commit `72aeee6e54c1f2357b8b2dbab44ce1dd2316d6e0`, containing PR #1 merge
-`bb7e123b7c5994fa73330556e53e7d88a306572e` and PR #1233
-`1a5410be8244b00fbcec68a5efc54b186220c5c5`. The fresh production capture recorded Relay
-`32766531`, Asset Hub `20018213`, People `9130240`, and Bulletin `1579329`.
+The run tested PR #2 commit `d8a48ef6af14465a734cbd099ba9bc8e6e0d727c`, containing PR #1 merge
+`5b1652923abe49a21dba21ad352f9580dee56e2e` and PR #1233
+`a72ba8b15a046f28d10b1052860671da4ec13d37`. The fresh production capture recorded Relay
+`32776366`, Asset Hub `20043704`, People `9155490`, and Bulletin `1588607`.
 The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 The exact Asset Hub and People `2004000` candidate SHA-256 hashes were
 `e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d` and
-`93badb05d46b54cbbbacc4475dbf7da74058014ac6ba15d6b5511803f451d1e6`.
+`bc147e251052eb6ba566dda20297a640aa1f451dfcf94e2546d86179026ff13a`.
 
-Asset Hub and People activated successfully in the required order with recovery mode initially
-unset. Asset Hub's PGAS, `NextAssetId`, Revive, and pre-People subscription checks passed. After the
-People code activated, the strict invocation exposed a stale metadata assertion for the
-intentionally removed `Honour` pallet. The harness now requires the current pallet set and rejects
-`Honour`. After formatting and locked release checks passed, the documented
-`ZOMBIE_BITE_ALLOW_ALREADY_ACTIVE_CANDIDATES=1` path verified the exact active code on both chains,
-completed the XCM/subscription checks, and exited zero without resubmitting either upgrade.
+Asset Hub and People activated successfully in the required order with recovery mode unset. Asset
+Hub's PGAS, `NextAssetId`, Revive, and pre-People subscription checks passed. The same strict
+invocation then verified the current People pallet set, exact active code on both chains, and the
+completed XCM/subscription checks before exiting zero.
 
-The final 900-second verification advanced Relay `32766671 -> 32766821` (+150), Asset Hub
-`20018605 -> 20019055` (+450), People `9130635 -> 9131085` (+450), and Bulletin
-`1579466 -> 1579616` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
+The final 900-second verification advanced Relay `32776473 -> 32776623` (+150), Asset Hub
+`20043991 -> 20044441` (+450), People `9155788 -> 9156238` (+450), and Bulletin
+`1588711 -> 1588861` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
 upgraded collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People,
 the notifier whitelisting parachain `1000`, and the notifier offchain worker submitting
-`send_init_page`. The post-checkpoint audit found zero error or severe-failure lines.
+`send_init_page`. The pre-upgrade checkpoint contained none of those future-upgrade signals, and
+the post-checkpoint audit found zero error or severe-failure lines.
 
 The fresh production capture snapshot SHA-256 hashes were Relay
-`f4fa24062144c6e3a984dd213a690e5acba261c80e79509fdfc912edaacbb6cd`, Asset Hub
-`cb2623ed9835487998aa2a36b0b1a2b61a08f415baffc09589b060a5a2823d32`, People
-`c8dbc7dd83f4cc3a10e27dd6fc8558b19c88f8815f62e2756b300c3fbc3c7a9e`, and Bulletin
-`ef5c97254b34a641824b60e6ce80940f7f18b83c558383808e3b953f1715b2f7`.
+`733964bc388042a6a6ede7455cc5688454ea50ef1b73729168b4c145c389d03d`, Asset Hub
+`e84b0931ba119f52c5a6f1e8a911e7954c51fb5339b35ff00f11006e3421c8e3`, People
+`09cb4dc8a1abf1d630d1bc6baa1c70ecb49c53ab964c92ccdf2f7101b5358e76`, and Bulletin
+`b94841283f9f52a3cc46789226d3bf872e7ea7389cebfc468504d67d014c0e20`.
 
 After `make stop`, the foreground spawner exited zero, every related process exited, every captured
 RPC, P2P, and metrics port had no listener, and `stop.txt` was absent. The retained local validation
 artifact is
-`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260829-001`; it uses 26
-GiB. Both candidate WASMs remain under its `candidates` directory, and 250 GiB was free after the
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260830-001`; it uses 26
+GiB. Both candidate WASMs remain under its `candidates` directory, and 230 GiB was free after the
 post-run Cargo cleanup.
 
 ## Troubleshooting
