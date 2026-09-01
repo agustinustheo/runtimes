@@ -138,7 +138,7 @@ detail.
 
 Do not run `make spawn` until `make bite` returns to the shell with exit status zero.
 
-The latest fresh capture completed on 2026-08-30 UTC and took 3 hours 54 minutes 39 seconds. Capture
+The latest fresh capture completed on 2026-09-01 UTC and took 2 hours 57 minutes 56 seconds. Capture
 time depends on public peer availability and can vary substantially.
 
 ## 5. Confirm the capture files
@@ -154,10 +154,10 @@ Expected `ready.json` shape:
 
 ```json
 {
-  "para_1000_start_block": 20043704,
-  "para_1004_start_block": 9155490,
-  "para_1010_start_block": 1588607,
-  "rc_start_block": 32776366
+  "para_1000_start_block": 20122761,
+  "para_1004_start_block": 9233263,
+  "para_1010_start_block": 1617205,
+  "rc_start_block": 32804915
 }
 ```
 
@@ -199,7 +199,7 @@ Block #<relay-block-3>
 network is up and running...
 ```
 
-The latest run took 51 seconds from `make spawn` to the ready message with the explicit runtime log
+The latest run took 45 seconds from `make spawn` to the ready message with the explicit runtime log
 filters enabled.
 
 Leave Terminal 1 open. Continue in Terminal 2.
@@ -405,31 +405,31 @@ node/runtime-API compatibility noise only after confirming that it is the comple
 that all state and block-production checks pass. The latest run had zero post-checkpoint error
 lines.
 
-### Recorded 2026-08-30 UTC final result
+### Recorded 2026-09-01 UTC final result
 
 The strict invocation, with recovery mode unset, activated Asset Hub before People, verified both
 exact active candidates, completed the XCM/subscription checks, and exited zero. The full default
 900-second command then passed and produced this aggregate advancement:
 
 ```text
-relay: advanced 32776473 -> 32776623
-asset-hub: advanced 20043991 -> 20044441
-people: advanced 9155788 -> 9156238
-bulletin: advanced 1588711 -> 1588861
+relay: advanced 32805024 -> 32805174
+asset-hub: advanced 20123063 -> 20123510
+people: advanced 9233567 -> 9234014
+bulletin: advanced 1617311 -> 1617461
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
 The exact candidate hashes were Asset Hub
-`e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d` and People
-`bc147e251052eb6ba566dda20297a640aa1f451dfcf94e2546d86179026ff13a`.
+`67de190a18d7849695eade31171f4e89f1e5f4019058f8c354fb0a1dd0631647` and People
+`da81eea2fe26aaf051a996c209e96f5e0c1cf61afc7b219da6df364a5caba383`.
 
 The fresh capture snapshot hashes were Relay
-`733964bc388042a6a6ede7455cc5688454ea50ef1b73729168b4c145c389d03d`, Asset Hub
-`e84b0931ba119f52c5a6f1e8a911e7954c51fb5339b35ff00f11006e3421c8e3`, People
-`09cb4dc8a1abf1d630d1bc6baa1c70ecb49c53ab964c92ccdf2f7101b5358e76`, and Bulletin
-`b94841283f9f52a3cc46789226d3bf872e7ea7389cebfc468504d67d014c0e20`. The local result is retained
-in `artifacts-clean-proof-stable2606-20260830-001`. It uses 26 GiB; both exact candidate WASMs are
-retained under `candidates`, and 230 GiB was free after the post-run Cargo cleanup.
+`0e8039dc12cceb507850020e2a78d25310b12813e5e9385c9682af33ea6b78d3`, Asset Hub
+`749911da5ba55ccd0216433836f6558a5661d194aa3f83c2c0580e7200d7678e`, People
+`c57471d14acd42acbb30f1e05ddf75cc7db7fa55514602ed3f10a49e66727214`, and Bulletin
+`d3bafceade271ee664ad4d130bd7ff46b713d5d04133bfdd4a1d4612cd154544`. The local result is retained
+in `artifacts-clean-proof-stable2606-20260901-001`. It uses 26 GiB; both exact candidate WASMs are
+retained under `candidates`, and 228 GiB was free after the post-run Cargo cleanup.
 
 ## 12. Stop the network
 

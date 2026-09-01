@@ -224,19 +224,19 @@ the matching specs, snapshots, head markers, and block markers are already inter
 
 ## Runtime expectations and timing
 
-The latest validation completed on 2026-08-30 UTC. It performed a fresh production synchronization
+The latest validation completed on 2026-09-01 UTC. It performed a fresh production synchronization
 for Relay, Asset Hub, People, and Bulletin with both artifact-reuse variables explicitly unset. Its
 measured timings were:
 
-- clean candidate build: 13 minutes 53 seconds;
-- fresh four-chain production capture: 3 hours 54 minutes 39 seconds;
-- spawn to `network is up and running`: 51 seconds;
+- clean candidate build: 14 minutes 7 seconds;
+- fresh four-chain production capture: 2 hours 57 minutes 56 seconds;
+- spawn to `network is up and running`: 45 seconds;
 - fork verification, pre-upgrade verification, and log checkpoint: 39 seconds, including the 24-second
   block-production observation;
-- strict ordered Asset Hub then People activation: 8 minutes 21 seconds, with recovery mode unset;
+- strict ordered Asset Hub then People activation: 8 minutes 50 seconds, with recovery mode unset;
 - configured post-upgrade verification: exactly 15 minutes;
 - runtime-log extraction and manual audit: about 1 second; and
-- stop request to foreground-spawner exit: 48 seconds.
+- stop request to foreground-spawner exit: 22 seconds.
 
 The candidates were built with `CARGO_BUILD_JOBS=2` and
 `WASM_BUILD_WORKSPACE_HINT="$(git rev-parse --show-toplevel)"`. The local `polkadot` and
@@ -247,39 +247,39 @@ SHA-256 hashes `e6b3926024c86dddeb3f249942d17e7b8428b8c506919dff9cc9915d9e201a0e
 
 ## Latest validated results
 
-The run tested PR #2 commit `d8a48ef6af14465a734cbd099ba9bc8e6e0d727c`, containing PR #1 merge
-`5b1652923abe49a21dba21ad352f9580dee56e2e` and PR #1233
-`a72ba8b15a046f28d10b1052860671da4ec13d37`. The fresh production capture recorded Relay
-`32776366`, Asset Hub `20043704`, People `9155490`, and Bulletin `1588607`.
+The run tested PR #2 commit `bafe38d207361f1206f6717d5849351760b637d8`, containing PR #1 merge
+`52bc9e12f681f0e3c05b039231256fd1c0e0c803` and PR #1233
+`a28518fd332d98c241396de85b99ab0ae3353285`. The fresh production capture recorded Relay
+`32804915`, Asset Hub `20122761`, People `9233263`, and Bulletin `1617205`.
 The captured runtime versions were `2003002`, `2003002`, `2003002`, and `2002001`.
 The exact Asset Hub and People `2004000` candidate SHA-256 hashes were
-`e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d` and
-`bc147e251052eb6ba566dda20297a640aa1f451dfcf94e2546d86179026ff13a`.
+`67de190a18d7849695eade31171f4e89f1e5f4019058f8c354fb0a1dd0631647` and
+`da81eea2fe26aaf051a996c209e96f5e0c1cf61afc7b219da6df364a5caba383`.
 
 Asset Hub and People activated successfully in the required order with recovery mode unset. Asset
 Hub's PGAS, `NextAssetId`, Revive, and pre-People subscription checks passed. The same strict
 invocation then verified the current People pallet set, exact active code on both chains, and the
 completed XCM/subscription checks before exiting zero.
 
-The final 900-second verification advanced Relay `32776473 -> 32776623` (+150), Asset Hub
-`20043991 -> 20044441` (+450), People `9155788 -> 9156238` (+450), and Bulletin
-`1588711 -> 1588861` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
+The final 900-second verification advanced Relay `32805024 -> 32805174` (+150), Asset Hub
+`20123063 -> 20123510` (+447), People `9233567 -> 9234014` (+447), and Bulletin
+`1617311 -> 1617461` (+150). Runtime logs showed XcmpQueue migration from version 6 to 7 on both
 upgraded collators, `PGAS asset created` on Asset Hub, `lite people collection created` on People,
 the notifier whitelisting parachain `1000`, and the notifier offchain worker submitting
 `send_init_page`. The pre-upgrade checkpoint contained none of those future-upgrade signals, and
 the post-checkpoint audit found zero error or severe-failure lines.
 
 The fresh production capture snapshot SHA-256 hashes were Relay
-`733964bc388042a6a6ede7455cc5688454ea50ef1b73729168b4c145c389d03d`, Asset Hub
-`e84b0931ba119f52c5a6f1e8a911e7954c51fb5339b35ff00f11006e3421c8e3`, People
-`09cb4dc8a1abf1d630d1bc6baa1c70ecb49c53ab964c92ccdf2f7101b5358e76`, and Bulletin
-`b94841283f9f52a3cc46789226d3bf872e7ea7389cebfc468504d67d014c0e20`.
+`0e8039dc12cceb507850020e2a78d25310b12813e5e9385c9682af33ea6b78d3`, Asset Hub
+`749911da5ba55ccd0216433836f6558a5661d194aa3f83c2c0580e7200d7678e`, People
+`c57471d14acd42acbb30f1e05ddf75cc7db7fa55514602ed3f10a49e66727214`, and Bulletin
+`d3bafceade271ee664ad4d130bd7ff46b713d5d04133bfdd4a1d4612cd154544`.
 
 After `make stop`, the foreground spawner exited zero, every related process exited, every captured
 RPC, P2P, and metrics port had no listener, and `stop.txt` was absent. The retained local validation
 artifact is
-`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260830-001`; it uses 26
-GiB. Both candidate WASMs remain under its `candidates` directory, and 230 GiB was free after the
+`integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260901-001`; it uses 26
+GiB. Both candidate WASMs remain under its `candidates` directory, and 228 GiB was free after the
 post-run Cargo cleanup.
 
 ## Troubleshooting

@@ -161,24 +161,24 @@ Run `make stop` after all checks pass.
 Terminal 1 can take up to approximately 90 seconds to exit while Zombie Bite observes its stop
 file and tears down every node.
 
-## Recorded timing from the 2026-08-30 UTC validated run
+## Recorded timing from the 2026-09-01 UTC validated run
 
-The validation completed on 2026-08-30 UTC. Candidates were built from PR #2 commit
-`d8a48ef6af14465a734cbd099ba9bc8e6e0d727c`, which contains signed PR #1 merge
-`5b1652923abe49a21dba21ad352f9580dee56e2e` and PR #1233
-`a72ba8b15a046f28d10b1052860671da4ec13d37`. Both artifact-reuse variables were explicitly unset,
+The validation completed on 2026-09-01 UTC. Candidates were built from PR #2 commit
+`bafe38d207361f1206f6717d5849351760b637d8`, which contains signed PR #1 merge
+`52bc9e12f681f0e3c05b039231256fd1c0e0c803` and PR #1233
+`a28518fd332d98c241396de85b99ab0ae3353285`. Both artifact-reuse variables were explicitly unset,
 and all four production chains were resynchronized into a new artifact directory.
 
 | Phase | Measured duration |
 |---|---:|
-| Clean candidate build | `13 min 53 s` with `CARGO_BUILD_JOBS=2` |
-| Fresh four-chain synchronization to `ready.json` | `3 h 54 min 39 s` |
-| Spawn to ready marker | `51 s` |
+| Clean candidate build | `14 min 7 s` with `CARGO_BUILD_JOBS=2` |
+| Fresh four-chain synchronization to `ready.json` | `2 h 57 min 56 s` |
+| Spawn to ready marker | `45 s` |
 | Fork verification, pre-upgrade verification, and runtime-log checkpoint | `39 s`, including the `24 s` block-production observation |
-| Strict ordered Asset Hub then People activation | `8 min 21 s`, with recovery mode unset |
+| Strict ordered Asset Hub then People activation | `8 min 50 s`, with recovery mode unset |
 | Configured post-upgrade verification | Exactly `15 min` |
 | Runtime-log extraction and manual audit | About `1 s` |
-| Stop request to spawner exit | `48 s` |
+| Stop request to spawner exit | `22 s` |
 
 The build also set `WASM_BUILD_WORKSPACE_HINT` to the current repository root. The pre-upgrade
 block-production check remains 24 seconds. The final verification used the full 900-second default
@@ -192,10 +192,10 @@ The manual run recorded these live-fork boundaries:
 
 | Chain | Recorded block |
 |---|---:|
-| Relay | `32776366` |
-| Asset Hub | `20043704` |
-| People | `9155490` |
-| Bulletin | `1588607` |
+| Relay | `32804915` |
+| Asset Hub | `20122761` |
+| People | `9233263` |
+| Bulletin | `1617205` |
 
 The artifact directory contains the same values in `ready.json`.
 
@@ -233,10 +233,10 @@ recovery invocation was needed.
 The complete default 900-second command then passed and included this final result:
 
 ```text
-relay: advanced 32776473 -> 32776623
-asset-hub: advanced 20043991 -> 20044441
-people: advanced 9155788 -> 9156238
-bulletin: advanced 1588711 -> 1588861
+relay: advanced 32805024 -> 32805174
+asset-hub: advanced 20123063 -> 20123510
+people: advanced 9233567 -> 9234014
+bulletin: advanced 1617311 -> 1617461
 Only Asset Hub and People upgraded; all four chains continued producing blocks throughout the 900-second post-upgrade observation.
 ```
 
@@ -246,23 +246,23 @@ artifact-related process remained.
 
 The exact candidate SHA-256 hashes activated in this run were:
 
-- Asset Hub (`2848732` bytes): `e0f27398eccd5f2074943c6526ce633adeee816c50f27ea6032937502f70c80d`
-- People (`1783780` bytes): `bc147e251052eb6ba566dda20297a640aa1f451dfcf94e2546d86179026ff13a`
+- Asset Hub (`2848539` bytes): `67de190a18d7849695eade31171f4e89f1e5f4019058f8c354fb0a1dd0631647`
+- People (`1792679` bytes): `da81eea2fe26aaf051a996c209e96f5e0c1cf61afc7b219da6df364a5caba383`
 
 The four non-empty, gzip-valid snapshot artifacts were:
 
 | Chain | Bytes | SHA-256 |
 |---|---:|---|
-| Relay | `330077462` | `733964bc388042a6a6ede7455cc5688454ea50ef1b73729168b4c145c389d03d` |
-| Asset Hub | `2762783876` | `e84b0931ba119f52c5a6f1e8a911e7954c51fb5339b35ff00f11006e3421c8e3` |
-| People | `4868464` | `09cb4dc8a1abf1d630d1bc6baa1c70ecb49c53ab964c92ccdf2f7101b5358e76` |
-| Bulletin | `2587729` | `b94841283f9f52a3cc46789226d3bf872e7ea7389cebfc468504d67d014c0e20` |
+| Relay | `329738487` | `0e8039dc12cceb507850020e2a78d25310b12813e5e9385c9682af33ea6b78d3` |
+| Asset Hub | `2765415093` | `749911da5ba55ccd0216433836f6558a5661d194aa3f83c2c0580e7200d7678e` |
+| People | `4865490` | `c57471d14acd42acbb30f1e05ddf75cc7db7fa55514602ed3f10a49e66727214` |
+| Bulletin | `2591355` | `d3bafceade271ee664ad4d130bd7ff46b713d5d04133bfdd4a1d4612cd154544` |
 
 The local evidence is retained under
-`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260830-001`.
+`/Users/theo/Projects/parity/runtimes/integration-tests/polkadot-live-fork/artifacts-clean-proof-stable2606-20260901-001`.
 It is intentionally untracked and was not pushed. The validation directory uses 26 GiB. After both
 exact candidate WASMs were retained under `candidates` and this run's Cargo targets were cleaned,
-230 GiB was free.
+228 GiB was free.
 
 ## Warnings and normal waits
 
@@ -284,9 +284,9 @@ Keep enough free space for the Rust build, captured snapshots, and spawned worki
 The retained final validation directory uses approximately 26 GiB after the latest run. Start a
 cold clean run with at least 250 GiB free because temporary
 capture data, build products, and spawned working copies can coexist while the test is active.
-Preflight began with 253 GiB free; 247 GiB remained after the candidate build and 224 GiB after
+Preflight began with 253 GiB free; 252 GiB remained after the candidate build and 227 GiB after
 clean shutdown. The post-run root and upgrade-client Cargo cleans removed 6.0 GiB and 538.3 MiB,
-restoring free space to 230 GiB.
+restoring free space to 228 GiB.
 
 `cargo clean` removes compiled Rust data. It does not remove live-fork snapshots. Cargo cleanup is
 not a required step for each test.
