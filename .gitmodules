@@ -1,0 +1,3 @@
+[submodule "preview-net-v1"]
+	path = preview-net-v1
+	url = git@github.com:paritytech/preview-net-v1.git

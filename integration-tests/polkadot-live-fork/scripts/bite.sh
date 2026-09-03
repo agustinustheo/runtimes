@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+
+required_open_files=4096
+current_open_files="$(ulimit -Sn)"
+if [[ "$current_open_files" != "unlimited" ]] && (( current_open_files < required_open_files )); then
+	if ! ulimit -Sn "$required_open_files" 2>/dev/null; then
+		echo "Zombie Bite needs at least $required_open_files open files; current soft limit is $current_open_files" >&2
+		echo "Run 'ulimit -n $required_open_files' in this terminal and retry." >&2
+		exit 1
+	fi
+	echo "Raised the open-file limit from $current_open_files to $(ulimit -Sn)"
+fi
+
+"$HARNESS_DIR/scripts/setup.sh"
+require_file "$ASSET_HUB_WASM"
+require_file "$PEOPLE_WASM"
+
+node "$HARNESS_DIR/scripts/preflight.mjs"
+config="$(node "$HARNESS_DIR/scripts/generate-config.mjs")"
+
+export PATH="$DG_DIR:$PATH"
+export ZOMBIE_BITE_STATE_PRUNING="${ZOMBIE_BITE_STATE_PRUNING:-256}"
+export ZOMBIE_BITE_PARA_1000_STATE_PRUNING="${ZOMBIE_BITE_PARA_1000_STATE_PRUNING:-256}"
+export ZOMBIE_BITE_RC_PORT="${ZOMBIE_BITE_RC_PORT:-9944}"
+export ZOMBIE_BITE_BOB_PORT="${ZOMBIE_BITE_BOB_PORT:-9945}"
+export ZOMBIE_BITE_PARA_1000_PORT="${ZOMBIE_BITE_PARA_1000_PORT:-9910}"
+export ZOMBIE_BITE_PARA_1004_PORT="${ZOMBIE_BITE_PARA_1004_PORT:-9914}"
+export ZOMBIE_BITE_PARA_1010_PORT="${ZOMBIE_BITE_PARA_1010_PORT:-9920}"
+export ZOMBIE_BITE_PARA_1000_AUTHORIZED_UPGRADE="$ASSET_HUB_WASM"
+export ZOMBIE_BITE_PARA_1004_AUTHORIZED_UPGRADE="$PEOPLE_WASM"
+export ZOMBIE_BITE_PARA_1004_INDIVIDUALITY_SUBSCRIBER="${ZOMBIE_BITE_PARA_1004_INDIVIDUALITY_SUBSCRIBER:-1000}"
+export ZOMBIE_BITE_HRMP_CHANNELS="${ZOMBIE_BITE_HRMP_CHANNELS:-1004:1000}"
+people_to_asset_hub_channel_key="0x6a0da05ca59913bc38a8630590f2627cb6604cff828a6e3f579ca6c59ace013d98ebe6f3ad4dcc3aec030000e8030000"
+export ZOMBIE_BITE_HRMP_CHANNEL_1004_1000="${ZOMBIE_BITE_HRMP_CHANNEL_1004_1000:-$(node "$HARNESS_DIR/scripts/read-storage.mjs" "$RELAY_RPC" "$people_to_asset_hub_channel_key")}"
+"$ZOMBIE_BITE_BIN" bite --config "$config" --database "${ZOMBIE_BITE_DATABASE:-paritydb}"
+
+if [[ "${ZOMBIE_BITE_KEEP_DEBUG:-0}" != "1" ]] && [[ -d "$ARTIFACTS_DIR/bite-debug" ]]; then
+  find "$ARTIFACTS_DIR/bite-debug" -depth -delete
+fi
