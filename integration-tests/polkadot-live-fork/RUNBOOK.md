@@ -1,5 +1,8 @@
 # Polkadot Zombie Bite runtime-upgrade runbook
 
+> [!NOTE]
+> This file records the PR #1233 run on 2026-09-01 (`2003002` to `2004000`). This copy of the harness targets a later upgrade from the live `2005000`. Some expected values and checks are different. See [README.md](README.md).
+
 This runbook performs a live-state test of the Individuality changes using four local chains:
 
 - Polkadot Relay;
