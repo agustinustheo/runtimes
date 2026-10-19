@@ -97,22 +97,31 @@ function decodeMqcHead(encoded, sender) {
   throw new Error(`Asset Hub MQC history has no sender ${sender}`);
 }
 
-const [peopleToAssetHubChannel, assetHubIngress, peopleEgress, assetHubMqcHeads] =
-  await Promise.all([
-    rpc(relayEndpoint, "state_getStorage", [peopleToAssetHubChannelKey]),
-    rpc(relayEndpoint, "state_getStorage", [assetHubIngressIndexKey]),
-    rpc(relayEndpoint, "state_getStorage", [peopleEgressIndexKey]),
-    rpc(endpoints[1][1], "state_getStorage", [lastHrmpMqcHeadsKey]),
-  ]);
-if (!peopleToAssetHubChannel || !assetHubMqcHeads) {
-  throw new Error("missing live People-to-Asset-Hub HRMP channel state");
-}
-if (assetHubIngress !== "0x04ec030000" || peopleEgress !== "0x04e8030000") {
-  throw new Error("People-to-Asset-Hub HRMP indexes are not isolated to the test channel");
-}
-const peopleMqcHead = decodeMqcHead(assetHubMqcHeads, 1004);
-if (!peopleToAssetHubChannel.includes(peopleMqcHead)) {
-  throw new Error("relay HRMP channel head does not match Asset Hub's captured MQC head");
+// The captured People runtime can send the notifier initialization XCM right after spawn. The
+// relay channel head then moves before Asset Hub processes the message, so poll until both agree.
+const hrmpDeadline = Date.now() + 120_000;
+let peopleMqcHead;
+while (true) {
+  const [peopleToAssetHubChannel, assetHubIngress, peopleEgress, assetHubMqcHeads] =
+    await Promise.all([
+      rpc(relayEndpoint, "state_getStorage", [peopleToAssetHubChannelKey]),
+      rpc(relayEndpoint, "state_getStorage", [assetHubIngressIndexKey]),
+      rpc(relayEndpoint, "state_getStorage", [peopleEgressIndexKey]),
+      rpc(endpoints[1][1], "state_getStorage", [lastHrmpMqcHeadsKey]),
+    ]);
+  if (!peopleToAssetHubChannel || !assetHubMqcHeads) {
+    throw new Error("missing live People-to-Asset-Hub HRMP channel state");
+  }
+  if (assetHubIngress !== "0x04ec030000" || peopleEgress !== "0x04e8030000") {
+    throw new Error("People-to-Asset-Hub HRMP indexes are not isolated to the test channel");
+  }
+  peopleMqcHead = decodeMqcHead(assetHubMqcHeads, 1004);
+  if (peopleToAssetHubChannel.includes(peopleMqcHead)) break;
+  if (Date.now() >= hrmpDeadline) {
+    throw new Error("relay HRMP channel head does not match Asset Hub's captured MQC head");
+  }
+  console.log("relay HRMP channel head is ahead of Asset Hub's MQC head; waiting...");
+  await new Promise((resolve) => setTimeout(resolve, 6_000));
 }
 console.log(`relay retained live People-to-Asset-Hub HRMP head 0x${peopleMqcHead}`);
 
