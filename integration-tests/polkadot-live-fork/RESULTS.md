@@ -9,8 +9,8 @@ The #1320 run uses its own capture. A capture cannot be shared between the two c
 | Phase | Status | UTC |
 |---|---|---|
 | Candidate build | Passed | 2026-10-19 10:36 to 10:42 |
-| Preflight (live RPCs) | Not started | |
-| Capture (`make bite`) | Waits for the #1320 run | |
+| Preflight (live RPCs) | Passed | 2026-10-19 12:41 |
+| Capture (`make bite`) | Running | started 2026-10-19 12:41 |
 | `make spawn` | Not started | |
 | `make verify-fork` | Not started | |
 | `make verify` | Not started | |
@@ -28,6 +28,17 @@ The #1320 run uses its own capture. A capture cannot be shared between the two c
 | People | `2005001` | `bc048b3bc330132f762deb6bdbe8059196ea27df327873cd44a9d748703c5b3f` |
 
 The `spec_version` values come from the `runtime_version` custom section of each decompressed WASM.
+
+## Preflight
+
+| Chain | Live block | `spec_version` |
+|---|---:|---:|
+| Relay | `33499521` | `2005000` |
+| Asset Hub | `22024529` | `2005000` |
+| People | `11163271` | `2005000` |
+| Bulletin | `2306566` | `2005000` |
+
+Bulletin genesis matched `BULLETIN_GENESIS_HASH`.
 
 ## Environment
 
