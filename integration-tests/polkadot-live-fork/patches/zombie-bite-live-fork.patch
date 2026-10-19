@@ -1,0 +1,1514 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 753f5de..5a570fc 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2395,6 +2395,16 @@ dependencies = [
+  "autocfg",
+ ]
+ 
++[[package]]
++name = "fs2"
++version = "0.4.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
++dependencies = [
++ "libc",
++ "winapi",
++]
++
+ [[package]]
+ name = "funty"
+ version = "2.0.0"
+@@ -4470,6 +4480,25 @@ version = "0.1.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
+ 
++[[package]]
++name = "lz4"
++version = "1.28.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a20b523e860d03443e98350ceaac5e71c6ba89aea7d960769ec3ce37f4de5af4"
++dependencies = [
++ "lz4-sys",
++]
++
++[[package]]
++name = "lz4-sys"
++version = "1.11.1+lz4-1.10.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6bd8c0d6c6ed0cd30b3652886bb8711dc4bb01d637a68105a3d5158039b418e6"
++dependencies = [
++ "cc",
++ "libc",
++]
++
+ [[package]]
+ name = "mach2"
+ version = "0.4.3"
+@@ -4503,6 +4532,15 @@ dependencies = [
+  "rustix 1.0.7",
+ ]
+ 
++[[package]]
++name = "memmap2"
++version = "0.5.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "83faa42c0a078c393f6b29d5db232d8be22776a891f8f56e5284faee4a20b327"
++dependencies = [
++ "libc",
++]
++
+ [[package]]
+ name = "memmap2"
+ version = "0.9.9"
+@@ -5102,6 +5140,27 @@ dependencies = [
+  "unicode-normalization",
+ ]
+ 
++[[package]]
++name = "parity-db"
++version = "0.4.13"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "592a28a24b09c9dc20ac8afaa6839abc417c720afe42c12e1e4a9d6aa2508d2e"
++dependencies = [
++ "blake2",
++ "crc32fast",
++ "fs2",
++ "hex",
++ "libc",
++ "log",
++ "lz4",
++ "memmap2 0.5.10",
++ "parking_lot 0.12.3",
++ "rand 0.8.5",
++ "siphasher 0.3.11",
++ "snap",
++ "winapi",
++]
++
+ [[package]]
+ name = "parity-scale-codec"
+ version = "3.7.5"
+@@ -6545,7 +6604,7 @@ checksum = "124e67d20414d12f73640ba2586a5d44d7646ec58ea41d2f1dfd5d98ff56b1aa"
+ dependencies = [
+  "array-bytes",
+  "docify",
+- "memmap2",
++ "memmap2 0.9.9",
+  "parity-scale-codec",
+  "sc-chain-spec-derive",
+  "sc-client-api",
+@@ -7421,6 +7480,12 @@ version = "0.1.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "620a1d43d70e142b1d46a929af51d44f383db9c7a2ec122de2cd992ccfcf3c18"
+ 
++[[package]]
++name = "siphasher"
++version = "0.3.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
++
+ [[package]]
+ name = "siphasher"
+ version = "1.0.1"
+@@ -7506,7 +7571,7 @@ dependencies = [
+  "serde_json",
+  "sha2 0.10.9",
+  "sha3",
+- "siphasher",
++ "siphasher 1.0.1",
+  "slab",
+  "smallvec",
+  "soketto",
+@@ -7545,13 +7610,19 @@ dependencies = [
+  "rand_chacha 0.3.1",
+  "serde",
+  "serde_json",
+- "siphasher",
++ "siphasher 1.0.1",
+  "slab",
+  "smol",
+  "smoldot",
+  "zeroize",
+ ]
+ 
++[[package]]
++name = "snap"
++version = "1.1.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "199905e6153d6405f9728fe44daace35f8f837bbf830bb6e85fbd5828709a886"
++
+ [[package]]
+ name = "snow"
+ version = "0.9.6"
+@@ -10789,6 +10860,7 @@ dependencies = [
+  "futures",
+  "fxhash",
+  "hex",
++ "parity-db",
+  "parity-scale-codec",
+  "reqwest",
+  "scale-value 0.16.3",
+diff --git a/Cargo.toml b/Cargo.toml
+index d51ac8c..4f53890 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -29,6 +29,7 @@ hex = "0.4"
+ scale-value = "0.16"
+ tar = "0.4"
+ flate2 = "1.0"
++parity-db = "0.4.13"
+ sp-core = "34.0.0"
+ toml = "0.9"
+ 
+diff --git a/src/config.rs b/src/config.rs
+index 6a728cf..43e701e 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -18,6 +18,25 @@ pub fn get_state_pruning_config() -> String {
+     env::var("ZOMBIE_BITE_STATE_PRUNING").unwrap_or_else(|_| STATE_PRUNING.to_string())
+ }
+ 
++pub fn get_para_state_pruning_config(para_id: u32) -> String {
++    env::var(format!("ZOMBIE_BITE_PARA_{para_id}_STATE_PRUNING"))
++        .unwrap_or_else(|_| get_state_pruning_config())
++}
++
++fn sync_mode_for_pruning(state_pruning: &str) -> &'static str {
++    if state_pruning.starts_with("archive") {
++        "full"
++    } else {
++        "warp"
++    }
++}
++
++pub fn get_para_sync_mode(para_id: u32) -> String {
++    env::var(format!("ZOMBIE_BITE_PARA_{para_id}_SYNC_MODE")).unwrap_or_else(|_| {
++        sync_mode_for_pruning(&get_para_state_pruning_config(para_id)).to_string()
++    })
++}
++
+ pub const AH_POLKADOT_RCP: &str = "https://asset-hub-polkadot-rpc.n.dwellir.com";
+ pub const AH_KUSAMA_RCP: &str = "https://asset-hub-kusama-rpc.n.dwellir.com";
+ 
+@@ -269,8 +288,18 @@ impl Relaychain {
+         })
+     }
+ 
+-    // TODO: make this endpoints configurables
+     pub fn sync_endpoint(&self) -> String {
++        let configured = match self {
++            Relaychain::Polkadot { maybe_sync_url, .. }
++            | Relaychain::Kusama { maybe_sync_url, .. }
++            | Relaychain::Paseo { maybe_sync_url, .. }
++            | Relaychain::Westend { maybe_sync_url, .. } => maybe_sync_url,
++        };
++
++        if let Some(endpoint) = configured {
++            return endpoint.clone();
++        }
++
+         String::from(match self {
+             Relaychain::Polkadot { .. } => "wss://rpc.polkadot.io",
+             Relaychain::Kusama { .. } => "wss://kusama-rpc.polkadot.io",
+@@ -280,12 +309,14 @@ impl Relaychain {
+     }
+ 
+     pub fn rpc_endpoint(&self) -> String {
+-        String::from(match self {
+-            Relaychain::Polkadot { .. } => "wss://rpc.polkadot.io",
+-            Relaychain::Kusama { .. } => "wss://kusama-rpc.polkadot.io",
+-            Relaychain::Paseo { .. } => "wss://paseo-rpc.dwellir.com",
+-            Relaychain::Westend { .. } => "wss://westend-rpc.n.dwellir.com",
+-        })
++        let endpoint = self.sync_endpoint();
++        if let Some(rest) = endpoint.strip_prefix("wss://") {
++            format!("https://{rest}")
++        } else if let Some(rest) = endpoint.strip_prefix("ws://") {
++            format!("http://{rest}")
++        } else {
++            endpoint
++        }
+     }
+ 
+     pub fn context(&self) -> Context {
+@@ -625,8 +656,11 @@ pub fn generate_network_config(
+                     ("-l", "aura=debug,runtime=trace,cumulus-consensus=trace,consensus::common=trace,parachain::collation-generation=trace,parachain::collator-protocol=trace,parachain=debug,basic-authorship=trace").into(),
+                     "--force-authoring".into()
+                 ]);
+-                if let Ok(port) = env::var("ZOMBIE_BITE_AH_PORT") {
+-                    let rpc_port = port.parse().expect("env var ZOMBIE_BITE_AH_PORT must be a valid u16");
++                let para_port_var = format!("ZOMBIE_BITE_PARA_{}_PORT", para.id());
++                if let Ok(port) = env::var(&para_port_var).or_else(|_| env::var("ZOMBIE_BITE_AH_PORT")) {
++                    let rpc_port = port.parse().unwrap_or_else(|_| {
++                        panic!("env var {para_port_var} (or ZOMBIE_BITE_AH_PORT) must be a valid u16")
++                    });
+                     col_builder.with_rpc_port(rpc_port)
+                 } else {
+                     col_builder
+@@ -768,6 +802,13 @@ mod test {
+         assert_eq!(0, config.parachains().len());
+     }
+ 
++    #[test]
++    fn archive_pruning_uses_full_sync() {
++        assert_eq!(sync_mode_for_pruning("archive-canonical"), "full");
++        assert_eq!(sync_mode_for_pruning("archive"), "full");
++        assert_eq!(sync_mode_for_pruning("256"), "warp");
++    }
++
+     #[test]
+     fn config_with_para_ok() {
+         let config = generate_network_config(
+@@ -1069,6 +1110,16 @@ mod test {
+         }
+     }
+ 
++    #[test]
++    fn relaychain_uses_configured_sync_url_for_sync_and_rpc() {
++        let endpoint = "wss://polkadot-rpc.publicnode.com";
++        let relaychain =
++            Relaychain::new_with_values("polkadot", None, Some(endpoint.to_string()), None);
++
++        assert_eq!(relaychain.sync_endpoint(), endpoint);
++        assert_eq!(relaychain.rpc_endpoint(), "https://polkadot-rpc.publicnode.com");
++    }
++
+     #[test]
+     fn relaychain_epoch_durations() {
+         assert_eq!(Relaychain::new("polkadot").epoch_duration(), 2400);
+diff --git a/src/doppelganger.rs b/src/doppelganger.rs
+index 77a3130..6ead93a 100644
+--- a/src/doppelganger.rs
++++ b/src/doppelganger.rs
+@@ -2,7 +2,7 @@
+ // TODO: don't allow dead_code
+ 
+ use anyhow::anyhow;
+-use futures::future::try_join_all;
++use futures::future::{ready, try_join_all};
+ use futures::FutureExt;
+ use serde_json::json;
+ // use serde_json::json;
+@@ -18,6 +18,7 @@ use zombienet_sdk::NetworkConfig;
+ use codec::Encode;
+ use flate2::write::GzEncoder;
+ use flate2::Compression;
++use parity_db::{Db, Options};
+ use tar::Builder;
+ 
+ use tracing::debug;
+@@ -37,7 +38,8 @@ use crate::utils::{
+ };
+ 
+ use crate::config::{
+-    get_assigned_cores, get_state_pruning_config, Context, Parachain, Relaychain, Step,
++    get_assigned_cores, get_para_state_pruning_config, get_state_pruning_config, Context,
++    Parachain, Relaychain, Step,
+ };
+ use crate::overrides::{generate_default_overrides_for_para, generate_default_overrides_for_rc};
+ use crate::sync::{sync_para, sync_relay_only};
+@@ -101,7 +103,7 @@ pub async fn doppelganger_inner(
+                 .expect("'rpc_endpoint' for parachain should be set when use 'bite_at' to get the target header. qed");
+             let header = get_header_from_block(at_block, para_rpc).await?;
+ 
+-            let target_header_path = format!("{base_dir_str}/para-header.json");
++            let target_header_path = format!("{base_dir_str}/para-{}-header.json", para.id());
+             fs::write(&target_header_path, serde_json::to_string_pretty(&header)?)
+                 .await
+                 .expect("create target head json should works");
+@@ -110,6 +112,45 @@ pub async fn doppelganger_inner(
+             None
+         };
+ 
++        let para_chain_name = para.as_chain_string(&relay_chain.as_chain_string());
++        let cached_spec_path = format!("{base_dir_str}/{para_chain_name}-spec.json");
++        let cached_snap_path = format!("{base_dir_str}/{para_chain_name}-snap.tgz");
++        let cached_head_path = format!("{base_dir_str}/paras/{para_chain_name}/head.txt");
++        let reuse_cached = env::var("ZOMBIE_BITE_REUSE_PARA_ARTIFACTS").is_ok()
++            && Path::new(&cached_spec_path).is_file()
++            && Path::new(&cached_snap_path).is_file()
++            && Path::new(&cached_head_path).is_file()
++            && Path::new(&info_path).is_file();
++
++        if reuse_cached {
++            info!("♻️ Reusing cached snapshot for parachain {}", para.id());
++            let cached_chain = para
++                .chain_spec_path()
++                .map(str::to_string)
++                .unwrap_or(para_chain_name);
++            syncs.push(
++                ready(Ok::<_, ()>((
++                    None::<zombienet_provider::DynNode>,
++                    String::new(),
++                    cached_chain,
++                    cached_head_path,
++                    true,
++                )))
++                .boxed(),
++            );
++            continue;
++        }
++
++        // A failed or interrupted capture may leave completion markers behind. Remove them before
++        // starting a non-cached sync so only this process can satisfy the completion guard.
++        for stale_marker in [&info_path, &cached_head_path] {
++            match fs::remove_file(stale_marker).await {
++                Ok(()) => info!("Removed stale capture marker {stale_marker}"),
++                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
++                Err(error) => return Err(error.into()),
++            }
++        }
++
+         syncs.push(
+             sync_para(
+                 ns.clone(),
+@@ -122,6 +163,11 @@ pub async fn doppelganger_inner(
+                 maybe_target_header_path,
+                 database,
+             )
++            .map(|result| {
++                result.map(|(node, db_path, chain, head_path)| {
++                    (Some(node), db_path, chain, head_path, false)
++                })
++            })
+             .boxed(),
+         );
+     }
+@@ -132,7 +178,7 @@ pub async fn doppelganger_inner(
+     let mut para_artifacts = vec![];
+     let mut para_heads_env = vec![];
+     let context_para = Context::Parachain;
+-    for (para_index, (_sync_node, sync_db_path, sync_chain, sync_head_path)) in
++    for (para_index, (sync_node, sync_db_path, sync_chain, sync_head_path, reused)) in
+         res.into_iter().enumerate()
+     {
+         let para = paras_to
+@@ -151,7 +197,12 @@ pub async fn doppelganger_inner(
+         let sync_chain_name = para.as_chain_string(&relay_chain.as_chain_string());
+         let chain_spec_path = format!("{}/{}-spec.json", base_dir_str, sync_chain_name);
+ 
+-        if para.is_custom() {
++        if reused {
++            info!(
++                "♻️ Keeping cached spec and snapshot for parachain {}",
++                para.id()
++            );
++        } else if para.is_custom() {
+             // For custom paras, copy the user's chain spec and clear bootNodes
+             // instead of running `doppelganger-parachain build-spec` which may not
+             // understand arbitrary runtimes.
+@@ -179,10 +230,23 @@ pub async fn doppelganger_inner(
+         // generate the data.tgz to use as snapshot
+         let snap_path = format!("{}/{}-snap.tgz", base_dir_str, sync_chain_name);
+         trace!("snap_path: {snap_path}");
+-        generate_snap(&sync_db_path, &snap_path).await.unwrap();
++        if !reused {
++            sync_node
++                .expect("non-reused parachain capture has a sync node")
++                .destroy()
++                .await
++                .map_err(|error| anyhow!("failed to stop parachain sync node: {error:?}"))?;
++            ensure_paritydb_state_metadata_after_shutdown(
++                &sync_db_path,
++                &get_para_state_pruning_config(para.id()),
++            )
++            .await?;
++            generate_snap(&sync_db_path, &snap_path).await.unwrap();
++        }
+ 
+         let para_head_str = read_to_string(&sync_head_path)
+             .unwrap_or_else(|_| panic!("read para_head ({sync_head_path}) file should works."));
++        let para_head_str = para_head_str.trim();
+         let para_head_hex = if &para_head_str[..2] == "0x" {
+             &para_head_str[2..]
+         } else {
+@@ -220,81 +284,107 @@ pub async fn doppelganger_inner(
+     let rc_default_overrides_path =
+         generate_default_overrides_for_rc(&base_dir_str, &relay_chain, &paras_to, req_cores).await;
+     let rc_info_path = format!("{base_dir_str}/rc_info.txt");
+-    // RELAYCHAIN sync
++    let cached_relay_chain = relay_chain.as_chain_string();
++    let cached_relay_spec_path = format!("{base_dir_str}/{cached_relay_chain}-spec.json");
++    let cached_relay_snap_path = format!("{base_dir_str}/{cached_relay_chain}-snap.tgz");
++    let reuse_relay = env::var("ZOMBIE_BITE_REUSE_RELAY_ARTIFACTS").is_ok()
++        && Path::new(&cached_relay_spec_path).is_file()
++        && Path::new(&cached_relay_snap_path).is_file()
++        && Path::new(&rc_info_path).is_file();
++
++    let relay_artifacts = if reuse_relay {
++        info!("♻️ Reusing cached relay spec and snapshot");
++        ChainArtifact {
++            cmd: Context::Relaychain.cmd(),
++            chain: cached_relay_chain,
++            spec_path: cached_relay_spec_path,
++            snap_path: cached_relay_snap_path,
++            override_wasm: relay_chain.wasm_overrides().map(str::to_string),
++            para_id: None,
++        }
++    } else {
++        match fs::remove_file(&rc_info_path).await {
++            Ok(()) => info!("Removed stale relay capture marker {rc_info_path}"),
++            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
++            Err(error) => return Err(error.into()),
++        }
++        // RELAYCHAIN sync
+ 
+-    let maybe_target_header_path = if let Some(at_block) = relay_chain.at_block() {
+-        let header = get_header_from_block(at_block, &relay_chain.rpc_endpoint()).await?;
++        let maybe_target_header_path = if let Some(at_block) = relay_chain.at_block() {
++            let header = get_header_from_block(at_block, &relay_chain.rpc_endpoint()).await?;
+ 
+-        let target_header_path = format!("{base_dir_str}/rc-header.json");
+-        fs::write(&target_header_path, serde_json::to_string_pretty(&header)?)
+-            .await
+-            .expect("create target head json should works");
+-        Some(target_header_path)
+-    } else {
+-        None
+-    };
++            let target_header_path = format!("{base_dir_str}/rc-header.json");
++            fs::write(&target_header_path, serde_json::to_string_pretty(&header)?)
++                .await
++                .expect("create target head json should works");
++            Some(target_header_path)
++        } else {
++            None
++        };
+ 
+-    let (sync_node, sync_db_path, sync_chain) = sync_relay_only(
+-        ns.clone(),
+-        "doppelganger",
+-        relay_chain.as_chain_string(),
+-        para_heads_env,
+-        rc_default_overrides_path,
+-        &rc_info_path,
+-        maybe_target_header_path,
+-        database,
+-    )
+-    .await
+-    .unwrap();
++        let (sync_node, sync_db_path, sync_chain) = sync_relay_only(
++            ns.clone(),
++            "doppelganger",
++            relay_chain.as_chain_string(),
++            para_heads_env,
++            rc_default_overrides_path,
++            &rc_info_path,
++            maybe_target_header_path,
++            database,
++        )
++        .await
++        .unwrap();
+ 
+-    // stop relay node
+-    sync_node.destroy().await.unwrap();
+-
+-    // get the chain-spec (prod) and clean the bootnodes
+-    // relaychain
+-    let context_relay = Context::Relaychain;
+-    let r_chain_spec_path = format!("{}/{}-spec.json", base_dir_str, sync_chain);
+-    generate_chain_spec(
+-        ns.clone(),
+-        &r_chain_spec_path,
+-        &context_relay.doppelganger_cmd(),
+-        &sync_chain,
+-    )
+-    .await
+-    .unwrap();
++        // stop relay node
++        sync_node.destroy().await.unwrap();
++
++        // get the chain-spec (prod) and clean the bootnodes
++        // relaychain
++        let context_relay = Context::Relaychain;
++        let r_chain_spec_path = format!("{}/{}-spec.json", base_dir_str, sync_chain);
++        generate_chain_spec(
++            ns.clone(),
++            &r_chain_spec_path,
++            &context_relay.doppelganger_cmd(),
++            &sync_chain,
++        )
++        .await
++        .unwrap();
+ 
+-    // remove `parachains` db
+-    let sync_chain_in_path = if sync_chain == "kusama" {
+-        "ksmcc3"
+-    } else if sync_chain == "westend" {
+-        "westend2"
+-    } else {
+-        sync_chain.as_str()
+-    };
++        // remove `parachains` db
++        let sync_chain_in_path = if sync_chain == "kusama" {
++            "ksmcc3"
++        } else if sync_chain == "westend" {
++            "westend2"
++        } else {
++            sync_chain.as_str()
++        };
+ 
+-    let parachains_path = if database == "rocksdb" {
+-        format!("{sync_db_path}/chains/{sync_chain_in_path}/db/full/parachains")
+-    } else {
+-        format!("{sync_db_path}/chains/{sync_chain_in_path}/paritydb/parachains")
+-    };
++        let parachains_path = if database == "rocksdb" {
++            format!("{sync_db_path}/chains/{sync_chain_in_path}/db/full/parachains")
++        } else {
++            format!("{sync_db_path}/chains/{sync_chain_in_path}/paritydb/parachains")
++        };
+ 
+-    debug!("Deleting `parachains` db at {parachains_path}");
+-    tokio::fs::remove_dir_all(parachains_path)
+-        .await
+-        .expect("remove parachains db should work");
+-
+-    // generate the data.tgz to use as snapshot
+-    let r_snap_path = format!("{}/{}-snap.tgz", base_dir_str, sync_chain);
+-    generate_snap(&sync_db_path, &r_snap_path).await.unwrap();
+-
+-    let relay_artifacts = ChainArtifact {
+-        // cmd: context_relay.doppelganger_cmd(),
+-        cmd: context_relay.cmd(),
+-        chain: sync_chain,
+-        spec_path: r_chain_spec_path,
+-        snap_path: r_snap_path,
+-        override_wasm: relay_chain.wasm_overrides().map(str::to_string),
+-        para_id: None,
++        debug!("Deleting `parachains` db at {parachains_path}");
++        tokio::fs::remove_dir_all(parachains_path)
++            .await
++            .expect("remove parachains db should work");
++
++        // generate the data.tgz to use as snapshot
++        let r_snap_path = format!("{}/{}-snap.tgz", base_dir_str, sync_chain);
++        ensure_paritydb_state_metadata(&sync_db_path, &get_state_pruning_config())?;
++        generate_snap(&sync_db_path, &r_snap_path).await.unwrap();
++
++        ChainArtifact {
++            // cmd: context_relay.doppelganger_cmd(),
++            cmd: context_relay.cmd(),
++            chain: sync_chain,
++            spec_path: r_chain_spec_path,
++            snap_path: r_snap_path,
++            override_wasm: relay_chain.wasm_overrides().map(str::to_string),
++            para_id: None,
++        }
+     };
+ 
+     let config = generate_config(
+@@ -317,6 +407,7 @@ pub async fn doppelganger_inner(
+     let rc_start_block = fs::read_to_string(format!("{base_dir_str}/rc_info.txt"))
+         .await
+         .unwrap()
++        .trim()
+         .parse::<u64>()
+         .expect("read bite rc block should works");
+ 
+@@ -326,6 +417,7 @@ pub async fn doppelganger_inner(
+         let para_start_block = fs::read_to_string(format!("{base_dir_str}/para-{}.txt", para.id()))
+             .await
+             .unwrap()
++            .trim()
+             .parse::<u64>()
+             .unwrap_or_else(|_| panic!("read bite para-{} block should works", para.id()));
+         para_start_blocks.insert(
+@@ -471,7 +563,10 @@ pub async fn generate_artifacts(
+                 l if l.starts_with("default_db_snapshot =") => {
+                     String::from("") // emty to remove
+                 }
+-                l if l.starts_with("name =") => {
++                l if l == r#"name = "alice""#
++                    || l == r#"name = "bob""#
++                    || l.starts_with(r#"name = "Collator-"#) =>
++                {
+                     if needs_to_insert_db {
+                         let snap_line = format!(r#"db_snapshot = "{}""#, snaps.remove(0));
+                         trace!("setting {snap_line}");
+@@ -717,13 +812,19 @@ async fn generate_config(
+                 )
+             };
+ 
+-            let para_rpc_port: u16 = if let Ok(port) = env::var("ZOMBIE_BITE_AH_PORT") {
+-                port.parse()
+-                    .expect("env var ZOMBIE_BITE_AH_PORT must be a valid u16")
++            let para_id = para.para_id.expect("Para id should be available");
++            let para_port_var = format!("ZOMBIE_BITE_PARA_{para_id}_PORT");
++            let para_rpc_port: u16 = if let Ok(port) =
++                env::var(&para_port_var).or_else(|_| env::var("ZOMBIE_BITE_AH_PORT"))
++            {
++                port.parse().unwrap_or_else(|_| {
++                    panic!("env var {para_port_var} (or ZOMBIE_BITE_AH_PORT) must be a valid u16")
++                })
+             } else {
+                 get_random_port().await
+             };
+ 
++            let para_state_pruning = get_para_state_pruning_config(para_id);
+             let mut para_default_args = vec![
+                 (
+                     "--relay-chain-rpc-urls",
+@@ -735,7 +836,7 @@ async fn generate_config(
+                 "--discover-local".into(),
+                 "--allow-private-ip".into(),
+                 "--no-hardware-benchmarks".into(),
+-                ("--state-pruning", get_state_pruning_config().as_str()).into(),
++                ("--state-pruning", para_state_pruning.as_str()).into(),
+                 ("--database", database).into(),
+             ];
+ 
+@@ -745,11 +846,15 @@ async fn generate_config(
+                 }
+             }
+ 
+-            if para.chain.contains("asset-hub") {
++            // Custom retained-fork specs are named by para id (for example
++            // `1000-polkadot`), so chain-name matching alone misses them.
++            if matches!(para_id, 1000 | 1004)
++                || para.chain.contains("asset-hub")
++                || para.chain.contains("people")
++            {
+                 para_default_args.push("--authoring=slot-based".into());
+             }
+ 
+-            let para_id = para.para_id.expect("Para id should be available");
+             let collator_name = format!("Collator-{}", para_id);
+ 
+             config = config.with_parachain(|p| {
+@@ -847,6 +952,93 @@ async fn generate_snap(data_path: &str, snap_path: &str) -> Result<(), anyhow::E
+     Ok(())
+ }
+ 
++fn state_db_pruning_mode(state_pruning: &str) -> &'static [u8] {
++    if state_pruning.starts_with("archive-canonical") {
++        b"archive_canonical"
++    } else if state_pruning.starts_with("archive") {
++        b"archive"
++    } else {
++        b"constrained"
++    }
++}
++
++fn collect_paritydb_full_paths(path: &Path, result: &mut Vec<PathBuf>) -> std::io::Result<()> {
++    for entry in std::fs::read_dir(path)? {
++        let entry = entry?;
++        let child = entry.path();
++        if !child.is_dir() {
++            continue;
++        }
++        let is_full_database = child.file_name().and_then(|name| name.to_str()) == Some("full")
++            && child
++                .parent()
++                .and_then(Path::file_name)
++                .and_then(|name| name.to_str())
++                == Some("paritydb")
++            && child.join("metadata").is_file();
++        if is_full_database {
++            result.push(child);
++        } else {
++            collect_paritydb_full_paths(&child, result)?;
++        }
++    }
++    Ok(())
++}
++
++pub fn ensure_paritydb_state_metadata(
++    data_path: &str,
++    state_pruning: &str,
++) -> Result<(), anyhow::Error> {
++    let mut database_paths = Vec::new();
++    collect_paritydb_full_paths(Path::new(data_path), &mut database_paths)?;
++    for path in database_paths {
++        let metadata = Options::load_metadata(&path)?
++            .ok_or_else(|| anyhow!("ParityDB metadata is missing at {}", path.display()))?;
++        let mut options = Options::with_columns(&path, metadata.columns.len() as u8);
++        options.columns = metadata.columns;
++        let database = Db::open(&options)?;
++        let mode = state_db_pruning_mode(state_pruning).to_vec();
++        if database.get(2, b"mode")?.is_none() {
++            database.commit([(2, b"mode".as_slice(), Some(mode.clone()))])?;
++            info!(
++                "Recorded missing StateDB pruning mode {} in {}",
++                String::from_utf8_lossy(&mode),
++                path.display()
++            );
++        }
++        drop(database);
++
++        // Reopening replays and flushes a newly committed ParityDB log before the directory is
++        // archived. Without this, a very large state-sync database can lose the final metadata
++        // write when the short-lived repair handle is dropped.
++        let database = Db::open(&options)?;
++        if database.get(2, b"mode")? != Some(mode) {
++            return Err(anyhow!(
++                "StateDB pruning mode was not persisted in {}",
++                path.display()
++            ));
++        }
++    }
++    Ok(())
++}
++
++async fn ensure_paritydb_state_metadata_after_shutdown(
++    data_path: &str,
++    state_pruning: &str,
++) -> Result<(), anyhow::Error> {
++    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
++    loop {
++        match ensure_paritydb_state_metadata(data_path, state_pruning) {
++            Ok(()) => return Ok(()),
++            Err(error) if tokio::time::Instant::now() < deadline => {
++                debug!("Waiting for the stopped node to release ParityDB: {error}");
++                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
++            }
++            Err(error) => return Err(error),
++        }
++    }
++}
++
+ async fn generate_chain_spec(
+     ns: DynNamespace,
+     chain_spec_path: &str,
+@@ -934,6 +1126,16 @@ fn get_epoch_ms() -> u128 {
+ mod test {
+     use super::*;
+ 
++    #[test]
++    fn state_db_pruning_mode_matches_node_configuration() {
++        assert_eq!(state_db_pruning_mode("256"), b"constrained");
++        assert_eq!(state_db_pruning_mode("archive"), b"archive");
++        assert_eq!(
++            state_db_pruning_mode("archive-canonical"),
++            b"archive_canonical"
++        );
++    }
++
+     #[ignore = "Internal test, require some artifacts"]
+     #[tokio::test(flavor = "multi_thread")]
+     async fn test_snap() {
+diff --git a/src/monit.rs b/src/monit.rs
+index aca7b9d..3ca857e 100644
+--- a/src/monit.rs
++++ b/src/monit.rs
+@@ -1,10 +1,12 @@
+-use std::time::Duration;
++use std::{env, time::Duration};
+ 
+ use tokio::fs;
+ use tracing::{debug, trace, warn};
+ use zombienet_sdk::NetworkNode;
+ 
+ const CHECK_TIMEOUT_SECS: u64 = 600; // 10 mins
++const INITIAL_PROGRESS_TIMEOUT_SECS: u64 = 300;
++const INITIAL_PROGRESS_POLL_SECS: u64 = 5;
+ 
+ async fn restart(node: &NetworkNode, checkpoint: impl Into<f64>) {
+     if (node.restart(None).await).is_ok() {
+@@ -37,6 +39,33 @@ async fn progress(node: &NetworkNode, checkpoint: impl Into<f64>) -> Result<f64,
+     }
+ }
+ 
++async fn wait_for_initial_progress(node: &NetworkNode) -> Result<f64, anyhow::Error> {
++    let timeout_secs = env::var("ZOMBIE_BITE_MONITOR_STARTUP_TIMEOUT_SECS")
++        .ok()
++        .and_then(|value| value.parse().ok())
++        .unwrap_or(INITIAL_PROGRESS_TIMEOUT_SECS);
++    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
++
++    loop {
++        match progress(node, 0).await {
++            Ok(block) => return Ok(block),
++            Err(error) if tokio::time::Instant::now() < deadline => {
++                debug!(
++                    "Waiting for {} to expose initial block progress: {error}",
++                    node.name()
++                );
++                tokio::time::sleep(Duration::from_secs(INITIAL_PROGRESS_POLL_SECS)).await;
++            }
++            Err(error) => {
++                return Err(anyhow::anyhow!(
++                    "{} did not expose positive block progress within {timeout_secs}s: {error}",
++                    node.name()
++                ));
++            }
++        }
++    }
++}
++
+ pub async fn monit_progress(
+     alice: &NetworkNode,
+     bob: &NetworkNode,
+@@ -44,13 +73,17 @@ pub async fn monit_progress(
+     stop_file: Option<&str>,
+ ) {
+     // monitoring block production every 15 mins
+-    let mut alice_block = progress(alice, 0).await.expect("first check should works");
+-    let mut bob_block = progress(bob, 0).await.expect("first check should works");
++    let mut alice_block = wait_for_initial_progress(alice)
++        .await
++        .expect("alice should expose initial progress");
++    let mut bob_block = wait_for_initial_progress(bob)
++        .await
++        .expect("bob should expose initial progress");
+ 
+     let mut collator_block = if let Some(collator) = collator {
+-        progress(collator, 0)
++        wait_for_initial_progress(collator)
+             .await
+-            .expect("first check should works")
++            .expect("collator should expose initial progress")
+     } else {
+         // no collator deployed.
+         -1_f64
+diff --git a/src/overrides.rs b/src/overrides.rs
+index 3b45351..36e88ae 100644
+--- a/src/overrides.rs
++++ b/src/overrides.rs
+@@ -1,6 +1,6 @@
+ use codec::Encode;
+ use serde_json::{json, Value};
+-use std::{env, path::PathBuf};
++use std::{collections::BTreeMap, env, path::PathBuf};
+ use tokio::fs;
+ 
+ use crate::{
+@@ -13,6 +13,151 @@ use crate::{
+ 
+ use zombienet_sdk::generators::core_assignment;
+ 
++fn storage_value_key(pallet: &[u8], item: &[u8]) -> String {
++    array_bytes::bytes2hex("", substorager::storage_value_key(pallet, item))
++}
++
++fn twox64_concat_storage_map_key(pallet: &[u8], item: &[u8], key: &[u8]) -> String {
++    format!(
++        "{}{}{}",
++        storage_value_key(pallet, item),
++        array_bytes::bytes2hex("", subhasher::twox64(key)),
++        hex::encode(key)
++    )
++}
++
++fn configured_hrmp_channels() -> Vec<(u32, u32)> {
++    let Ok(value) = env::var("ZOMBIE_BITE_HRMP_CHANNELS") else {
++        return Vec::new();
++    };
++
++    value
++        .split(',')
++        .filter(|channel| !channel.is_empty())
++        .map(|channel| {
++            let (sender, recipient) = channel.split_once(':').unwrap_or_else(|| {
++                panic!("ZOMBIE_BITE_HRMP_CHANNELS entries must use sender:recipient")
++            });
++            let parse = |id: &str| {
++                id.parse::<u32>().unwrap_or_else(|error| {
++                    panic!("ZOMBIE_BITE_HRMP_CHANNELS contains invalid para id {id}: {error}")
++                })
++            };
++            (parse(sender), parse(recipient))
++        })
++        .collect()
++}
++
++fn hrmp_channel_overrides(
++    channels: &[(u32, u32)],
++    channel_value: impl Fn(u32, u32) -> String,
++) -> Vec<(String, String)> {
++    let mut ingress: BTreeMap<u32, Vec<ParaId>> = BTreeMap::new();
++    let mut egress: BTreeMap<u32, Vec<ParaId>> = BTreeMap::new();
++    let mut entries = Vec::new();
++
++    for &(sender, recipient) in channels {
++        assert_ne!(sender, recipient, "an HRMP channel cannot target itself");
++        ingress.entry(recipient).or_default().push(ParaId(sender));
++        egress.entry(sender).or_default().push(ParaId(recipient));
++
++        let channel_id = (ParaId(sender), ParaId(recipient)).encode();
++        entries.push((
++            twox64_concat_storage_map_key(b"Hrmp", b"HrmpChannels", &channel_id),
++            channel_value(sender, recipient),
++        ));
++    }
++
++    for ids in ingress.values_mut().chain(egress.values_mut()) {
++        ids.sort_unstable_by_key(|id| id.0);
++        ids.dedup();
++    }
++    entries.extend(ingress.into_iter().map(|(recipient, senders)| {
++        (
++            twox64_concat_storage_map_key(
++                b"Hrmp",
++                b"HrmpIngressChannelsIndex",
++                &ParaId(recipient).encode(),
++            ),
++            hex::encode(senders.encode()),
++        )
++    }));
++    entries.extend(egress.into_iter().map(|(sender, recipients)| {
++        (
++            twox64_concat_storage_map_key(
++                b"Hrmp",
++                b"HrmpEgressChannelsIndex",
++                &ParaId(sender).encode(),
++            ),
++            hex::encode(recipients.encode()),
++        )
++    }));
++
++    entries
++}
++
++async fn authorized_upgrade(para_id: u32) -> Option<(String, String)> {
++    let variable = format!("ZOMBIE_BITE_PARA_{para_id}_AUTHORIZED_UPGRADE");
++    let path = env::var(&variable).ok()?;
++    let code = fs::read(&path)
++        .await
++        .unwrap_or_else(|error| panic!("Error reading {variable} from {path}: {error}"));
++    let key = storage_value_key(b"System", b"AuthorizedUpgrade");
++    let value = format!("{}01", hex::encode(subhasher::blake2_256(&code)));
++    Some((key, value))
++}
++
++fn individuality_subscription(para_id: u32) -> Option<Vec<(String, String)>> {
++    let variable = format!("ZOMBIE_BITE_PARA_{para_id}_INDIVIDUALITY_SUBSCRIBER");
++    let subscriber = env::var(&variable)
++        .ok()?
++        .parse::<u32>()
++        .unwrap_or_else(|error| panic!("{variable} must contain a parachain id: {error}"));
++    Some(individuality_subscription_for(subscriber))
++}
++
++fn individuality_subscription_for(subscriber: u32) -> Vec<(String, String)> {
++    let pallet = b"MembersNotifier";
++    let map_key = |item: &[u8]| {
++        format!(
++            "{}{}",
++            storage_value_key(pallet, item),
++            hex::encode(subscriber.encode())
++        )
++    };
++
++    // SCALE: one `(Identifier, RingExponent::R2e9)` collection. This fixture represents
++    // the governance subscription that has to exist before the notifier's authorized
++    // offchain maintenance call can initialize Asset Hub's subscriber pallet.
++    let mut collections = vec![4];
++    collections.extend_from_slice(b"pop:polkadot.network/people     ");
++    collections.push(9);
++
++    let mut subscriber_info = collections.clone();
++    subscriber_info.extend_from_slice(&0_u64.encode());
++    subscriber_info.push(97); // MembersSubscriber pallet index on Asset Hub Polkadot.
++
++    let mut pending_init = collections;
++    pending_init.extend_from_slice(&0_u32.encode()); // current_collection_index
++    pending_init.push(0); // after_ring_index: None
++    pending_init.extend_from_slice(&0_u64.encode()); // sequence
++    pending_init.extend_from_slice(&0_u64.encode()); // source_time
++    pending_init.push(97);
++
++    vec![
++        (map_key(b"Subscribers"), hex::encode(subscriber_info)),
++        (map_key(b"PendingInit"), hex::encode(pending_init)),
++        (
++            storage_value_key(pallet, b"CounterForSubscribers"),
++            hex::encode(1_u32.encode()),
++        ),
++        (
++            storage_value_key(pallet, b"CounterForPendingInit"),
++            hex::encode(1_u32.encode()),
++        ),
++    ]
++}
++
+ /// Generate the injects for Session.NextKeys storage overrides for validators
+ fn generate_next_keys_injects(
+     validator_keys: &[&crate::utils::ValidatorKeys],
+@@ -38,7 +183,10 @@ fn host_config(relay: &Relaychain, num_cores: u32) -> String {
+             format!("00003000005000005555150000008000fbff0100000200000a000000c80000006400000006000000020000000000a00000c800000a00000000c0220fca950300000000000000000000c0220fca9503000000000000000000e8030000009001000a000000009001000c01002000000600c4090000000000000601983a0000000000008070000001c800000006000000580200000200000028000000000000000200000001000000020000000f00000002000000100a010000000a00000005000000010500000005000000{}1027000080b2e60e80c3c9018096980000000000000000000000000000000000", cores)
+         }
+         Relaychain::Polkadot { .. } => {
+-            format!("0000300000500000aaaa020000001000fbff0000100000000a000000403800005802000003000000020000000000a00000c800008000000000e8764817000000000000000000000000e87648170000000000000000000000190000000090010080000000009001000c01002000000600c4090000000000000601983a0000000000004038000000060000005802000003000000d5000000000000001e00000006000000020000001400000002000000100b060000000a0000000a000000010500000005000000{}f401000080b2e60e80c3c90180b2e60e00000000000000000000000000000000", cores)
++            // The live 600-block validation-code delay makes a local runtime-upgrade test take
++            // about an hour. Keep the live host configuration otherwise intact, but enact fork-
++            // local upgrades after 10 relay blocks (subject to the existing minimum delay).
++            format!("0000300000500000aaaa020000001000fbff0000100000000a000000403800000a00000003000000020000000000a00000c800008000000000e8764817000000000000000000000000e87648170000000000000000000000190000000090010080000000009001000c01002000000600c4090000000000000601983a0000000000004038000000060000005802000003000000d5000000000000001e00000006000000020000001400000002000000100b060000000a0000000a000000010500000005000000{}f401000080b2e60e80c3c90180b2e60e00000000000000000000000000000000", cores)
+         }
+         Relaychain::Kusama { .. } => {
+             format!("0000300000500000aaaa0a0000004000fbff0000800000000a000000100e00005802000006000000020000000000a00000c800001e000000005039278c0400000000000000000000005039278c040000000000000000000019000000009001001e000000009001000c01002000000600c4090000000000000601983a0000000000008070000001bc0200000600000058020000030000002b010000000000001e00000006000000020000001400000002000000100b060000000a0000000a000000010500000005000000{}f401000080b2e60e80c3c90100f2052a01000000000000000000000000000000", cores)
+@@ -198,6 +346,22 @@ fn augment_overrides_for_paras(relay: &Relaychain, paras: &[&Parachain], overrid
+         let scheduler_key = core_assignment::get_parascheduler_storage_key();
+         overrides[&scheduler_key[2..]] = json!(core_assign_value);
+     }
++
++    let para_ids: Vec<u32> = paras.iter().map(|para| para.id()).collect();
++    let channels = configured_hrmp_channels();
++    for &(sender, recipient) in &channels {
++        assert!(
++            para_ids.contains(&sender) && para_ids.contains(&recipient),
++            "configured HRMP channel {sender}:{recipient} must reference enabled parachains"
++        );
++    }
++    for (key, value) in hrmp_channel_overrides(&channels, |sender, recipient| {
++        let variable = format!("ZOMBIE_BITE_HRMP_CHANNEL_{sender}_{recipient}");
++        env::var(&variable)
++            .unwrap_or_else(|_| panic!("{variable} must contain the captured live channel value"))
++    }) {
++        overrides[key] = json!(value);
++    }
+ }
+ 
+ pub async fn generate_default_overrides_for_rc(
+@@ -305,23 +469,29 @@ pub async fn generate_default_overrides_for_rc(
+     file_path
+ }
+ 
++fn collator_key_type(relay: &Relaychain, para: &Parachain) -> &'static str {
++    match relay {
++        // Asset Hub Polkadot uses Ed25519 Aura keys. Retained-fork configurations
++        // describe it as a custom para, so the para id is the stable discriminator.
++        Relaychain::Polkadot { .. } if para.id() == 1000 => "ed",
++        _ => "sr",
++    }
++}
++
+ pub async fn generate_default_overrides_for_para(
+     base_dir: &str,
+     para: &Parachain,
+     relay: &Relaychain,
+ ) -> PathBuf {
+-    // For AH determine key type based on relay chain: ed25519 for Polkadot, sr25519 for others
+-    let key_type = match (relay, para) {
+-        (Relaychain::Polkadot { .. }, Parachain::AssetHub { .. }) => "ed",
+-        _ => "sr",
+-    };
++    // For AH determine key type based on relay chain: ed25519 for Polkadot, sr25519 for others.
++    let key_type = collator_key_type(relay, para);
+ 
+     // Generate collator key using "Collator-{para_id}" as seed
+     let seed = format!("Collator-{}", para.id());
+     let key_to_use = generate_collator_key_from_seed(&seed, key_type);
+ 
+     // Generate the injects using the helper function
+-    let injects = generate_collator_next_keys_injects(&key_to_use);
++    let mut injects = generate_collator_next_keys_injects(&key_to_use);
+ 
+     // <Pallet> <Item>
+     // e.g Validator Validators
+@@ -351,6 +521,23 @@ pub async fn generate_default_overrides_for_para(
+         overrides["3a636f6465"] = Value::String(hex::encode(wasm_content));
+     }
+ 
++    // A live system parachain has no local Sudo key. Tests can still exercise the real
++    // two-phase FRAME upgrade path by importing an authorization for a specific candidate
++    // code hash, then submitting System.apply_authorized_upgrade as an unsigned extrinsic.
++    // Put the key in both maps so this works whether live state has no authorization or a
++    // stale authorization that must be replaced.
++    if let Some((key, value)) = authorized_upgrade(para.id()).await {
++        overrides[&key] = Value::String(value.clone());
++        injects[&key] = Value::String(value);
++    }
++
++    if let Some(entries) = individuality_subscription(para.id()) {
++        for (key, value) in entries {
++            overrides[&key] = Value::String(value.clone());
++            injects[&key] = Value::String(value);
++        }
++    }
++
+     let full_content = json!({
+         "overrides": overrides,
+         "injects": injects
+@@ -380,6 +567,22 @@ mod test {
+ 
+     use super::*;
+ 
++    #[test]
++    fn custom_asset_hub_polkadot_uses_ed25519_collator_key() {
++        let para = Parachain::Custom {
++            id: 1000,
++            name: "asset-hub-retained-fork".to_string(),
++            chain_spec: "/tmp/1000-polkadot.json".to_string(),
++            maybe_override: None,
++            maybe_bite_at: None,
++            maybe_rpc_endpoint: Some("http://127.0.0.1:9910".to_string()),
++            cores: 3,
++        };
++
++        assert_eq!(collator_key_type(&Relaychain::new("polkadot"), &para), "ed");
++        assert_eq!(collator_key_type(&Relaychain::new("kusama"), &para), "sr");
++    }
++
+     #[test]
+     fn genesis_slot_encode_u64() {
+         let prefix = array_bytes::bytes2hex(
+@@ -555,6 +758,54 @@ mod test {
+         println!("true: {}", array_bytes::bytes2hex("", t));
+         println!("false: {}", array_bytes::bytes2hex("", f));
+     }
++
++    #[test]
++    fn system_authorized_upgrade_storage_key() {
++        assert_eq!(
++            storage_value_key(b"System", b"AuthorizedUpgrade"),
++            "26aa394eea5630e07c48ae0c9558cef72fa9f1bf25567808771bff091dc89ecd"
++        );
++    }
++
++    #[test]
++    fn polkadot_host_config_shortens_validation_upgrade_delay() {
++        let config = hex::decode(host_config(&Relaychain::new("polkadot"), 3)).unwrap();
++        assert_eq!(u32::from_le_bytes(config[32..36].try_into().unwrap()), 10);
++    }
++
++    #[test]
++    fn individuality_subscription_fixture_targets_asset_hub() {
++        let entries = individuality_subscription_for(1000);
++
++        assert_eq!(entries.len(), 4);
++        assert!(entries[0].0.ends_with("e8030000"));
++        assert!(entries[1].0.ends_with("e8030000"));
++        assert!(entries[0]
++            .1
++            .starts_with("04706f703a706f6c6b61646f742e6e6574776f726b2f70656f706c65202020202009"));
++        let subscriber_info = hex::decode(&entries[0].1).unwrap();
++        assert_eq!(subscriber_info.len(), 43);
++        assert_eq!(subscriber_info.last(), Some(&97));
++        let pending_init = hex::decode(&entries[1].1).unwrap();
++        assert_eq!(pending_init.len(), 56);
++        assert!(pending_init[34..55].iter().all(|byte| *byte == 0));
++        assert_eq!(pending_init.last(), Some(&97));
++    }
++
++    #[test]
++    fn local_hrmp_indexes_retain_people_to_asset_hub() {
++        let channel = "e8030000009001000090010000000000000000000156a4acbc00a43b124f9e0aa2f1bc9f641b5892c8b0427c8442e3f8ba301741480000000000000000000000000000000000000000000000000000000000000000";
++        let entries = hrmp_channel_overrides(&[(1004, 1000)], |_, _| channel.into());
++
++        assert_eq!(entries.len(), 3);
++        assert!(entries[0].0.ends_with("ec030000e8030000"));
++        assert_eq!(entries[0].1, channel);
++        assert!(entries[1].0.ends_with("e8030000"));
++        assert_eq!(entries[1].1, "04ec030000");
++        assert!(entries[2].0.ends_with("ec030000"));
++        assert_eq!(entries[2].1, "04e8030000");
++    }
++
+     #[test]
+     fn encode_hrmp() {
+         let hrmp_prefix = array_bytes::bytes2hex(
+diff --git a/src/sync.rs b/src/sync.rs
+index efc3d91..945d34a 100644
+--- a/src/sync.rs
++++ b/src/sync.rs
+@@ -2,12 +2,17 @@
+ // TODO: don't allow dead_code
+ 
+ use std::{
++    collections::BTreeMap,
++    fs,
+     io::{self, Cursor, Write},
+-    path::PathBuf,
++    path::{Path, PathBuf},
+     time::Duration,
+ };
+ 
+-use crate::config::{get_state_pruning_config, Parachain, Relaychain};
++use crate::config::{
++    get_para_state_pruning_config, get_para_sync_mode, get_state_pruning_config, Parachain,
++    Relaychain,
++};
+ use crate::utils::get_random_port;
+ 
+ use reqwest::Url;
+@@ -98,11 +103,161 @@ pub async fn sync_relay_only(
+     wait_ws_ready(&metrics_url).await.unwrap();
+     let url = reqwest::Url::try_from(metrics_url.as_str()).unwrap();
+     wait_sync(url).await.unwrap();
++    if wait_for_file(info_path.as_ref(), Duration::from_secs(180))
++        .await
++        .is_err()
++    {
++        error!(
++            "❌ Relay sync stopped before Doppelganger wrote {}",
++            info_path.as_ref()
++        );
++        return Err(());
++    }
+     info!("✅ Synced (chain: {})", chain.as_ref());
+     // we should just paused
+     Ok((sync_node, sync_db_path, chain.as_ref().to_string()))
+ }
+ 
++async fn wait_for_file(path: impl AsRef<std::path::Path>, timeout: Duration) -> Result<(), ()> {
++    let started = tokio::time::Instant::now();
++    while started.elapsed() < timeout {
++        if tokio::fs::try_exists(path.as_ref()).await.unwrap_or(false) {
++            return Ok(());
++        }
++        tokio::time::sleep(Duration::from_secs(1)).await;
++    }
++    Err(())
++}
++
++fn paritydb_fingerprint(path: &Path) -> Result<(u64, u128), std::io::Error> {
++    fn visit(path: &Path, total_bytes: &mut u64, latest_write: &mut u128) -> std::io::Result<()> {
++        for entry in fs::read_dir(path)? {
++            let entry = entry?;
++            let metadata = entry.metadata()?;
++            if metadata.is_dir() {
++                visit(&entry.path(), total_bytes, latest_write)?;
++            } else {
++                *total_bytes = total_bytes.saturating_add(metadata.len());
++                if let Ok(modified) = metadata.modified() {
++                    if let Ok(elapsed) = modified.duration_since(std::time::UNIX_EPOCH) {
++                        *latest_write = (*latest_write).max(elapsed.as_nanos());
++                    }
++                }
++            }
++        }
++        Ok(())
++    }
++
++    let mut total_bytes = 0;
++    let mut latest_write = 0;
++    visit(path, &mut total_bytes, &mut latest_write)?;
++    Ok((total_bytes, latest_write))
++}
++
++fn paritydb_has_stale_indexes(path: &Path) -> Result<bool, std::io::Error> {
++    let mut indexes_per_column = BTreeMap::<String, usize>::new();
++    for entry in fs::read_dir(path)? {
++        let entry = entry?;
++        let name = entry.file_name();
++        let Some(name) = name.to_str() else { continue };
++        let Some(index) = name.strip_prefix("index_") else {
++            continue;
++        };
++        let Some((column, _bits)) = index.split_once('_') else {
++            continue;
++        };
++        *indexes_per_column.entry(column.to_string()).or_default() += 1;
++    }
++    Ok(indexes_per_column.values().any(|count| *count > 1))
++}
++
++async fn wait_for_paritydb_quiescent(data_path: &Path, timeout: Duration) -> Result<(), ()> {
++    let quiet_for = std::env::var("ZOMBIE_BITE_DB_QUIET_SECS")
++        .ok()
++        .and_then(|value| value.parse().ok())
++        .map(Duration::from_secs)
++        .unwrap_or_else(|| Duration::from_secs(30));
++    let started = tokio::time::Instant::now();
++    let mut unchanged_since = None;
++    let mut previous = None;
++
++    while started.elapsed() < timeout {
++        let full_path = find_paritydb_full_path(data_path).map_err(|error| {
++            error!(
++                "❌ Could not inspect ParityDB under {}: {error}",
++                data_path.display()
++            );
++        })?;
++        let fingerprint = paritydb_fingerprint(&full_path).map_err(|error| {
++            error!("❌ Could not fingerprint {}: {error}", full_path.display());
++        })?;
++        let has_stale_indexes = paritydb_has_stale_indexes(&full_path).map_err(|error| {
++            error!(
++                "❌ Could not inspect indexes in {}: {error}",
++                full_path.display()
++            );
++        })?;
++
++        if previous == Some(fingerprint) {
++            let quiet_since = unchanged_since.get_or_insert_with(tokio::time::Instant::now);
++            if quiet_since.elapsed() >= quiet_for {
++                info!(
++                    "✅ ParityDB is quiescent at {} ({} bytes unchanged for {}s, recoverable reindex pending: {})",
++                    full_path.display(),
++                    fingerprint.0,
++                    quiet_for.as_secs(),
++                    has_stale_indexes,
++                );
++                return Ok(());
++            }
++        } else {
++            unchanged_since = None;
++            previous = Some(fingerprint);
++        }
++        if has_stale_indexes {
++            info!(
++                "ParityDB has a recoverable background reindex at {}; waiting for writes to settle",
++                full_path.display()
++            );
++        }
++        tokio::time::sleep(Duration::from_secs(5)).await;
++    }
++
++    error!(
++        "❌ ParityDB did not become quiescent within {}s under {}",
++        timeout.as_secs(),
++        data_path.display()
++    );
++    Err(())
++}
++
++fn find_paritydb_full_path(path: &Path) -> Result<PathBuf, std::io::Error> {
++    for entry in fs::read_dir(path)? {
++        let entry = entry?;
++        let child = entry.path();
++        if !child.is_dir() {
++            continue;
++        }
++        if child.file_name().and_then(|name| name.to_str()) == Some("full")
++            && child
++                .parent()
++                .and_then(Path::file_name)
++                .and_then(|name| name.to_str())
++                == Some("paritydb")
++            && child.join("metadata").is_file()
++        {
++            return Ok(child);
++        }
++        if let Ok(found) = find_paritydb_full_path(&child) {
++            return Ok(found);
++        }
++    }
++    Err(std::io::Error::new(
++        std::io::ErrorKind::NotFound,
++        format!("no ParityDB full database below {}", path.display()),
++    ))
++}
++
+ #[allow(clippy::too_many_arguments)]
+ pub async fn sync_para(
+     ns: DynNamespace,
+@@ -131,6 +286,7 @@ pub async fn sync_para(
+ 
+     let rpc_random_port = get_random_port().await;
+     let metrics_random_port = get_random_port().await;
++    let relay_metrics_random_port = get_random_port().await;
+     let mut env = if std::env::var("ZOMBIE_DUMP").is_ok() {
+         vec![("ZOMBIE_DUMP", "1")]
+     } else {
+@@ -147,6 +303,9 @@ pub async fn sync_para(
+     env.push(("RUST_LOG", "doppelganger=debug"));
+     env.push(("ZOMBIE_INFO_PATH", info_path.as_ref()));
+     env.push(("ZOMBIE_PARA_ID", &para_id_str));
++    // The wrapper otherwise exits immediately after importing the target block. Keeping it alive
++    // lets ParityDB finish background reindexing before the caller explicitly stops the node.
++    env.push(("ZOMBIE_KEEP_ALIVE_ON_SYNC", "true"));
+ 
+     trace!("env: {env:?}");
+ 
+@@ -178,12 +337,14 @@ pub async fn sync_para(
+         chain, unique_node_name
+     );
+ 
++    let state_pruning = get_para_state_pruning_config(parachain.id());
++    let sync_mode = get_para_sync_mode(parachain.id());
+     let opts = SpawnNodeOptions::new(unique_node_name.as_str(), cmd.as_ref())
+         .args(vec![
+             "--chain",
+             chain_arg,
+             "--sync",
+-            "warp",
++            sync_mode.as_str(),
+             "-d",
+             &sync_db_path,
+             "--rpc-port",
+@@ -192,15 +353,21 @@ pub async fn sync_para(
+             &metrics_random_port.to_string(),
+             "--relay-chain-rpc-url",
+             relaychain_endpoint.as_ref(),
++            // The ephemeral capture node never needs to discover parachain bootnodes. Keeping
++            // discovery enabled makes a transient relay-chain reorg fatal when the DHT worker
++            // asks the RPC-backed relay client for a just-orphaned block.
++            "--no-dht-bootnode-discovery",
+             "--no-hardware-benchmarks",
+             // needed to not drop the pre-migration state
+             "--state-pruning",
+-            get_state_pruning_config().as_str(),
++            state_pruning.as_str(),
+             "--database",
+             database,
+             "--",
+             "--chain",
+             relaychain.as_chain_string().as_ref(),
++            "--prometheus-port",
++            &relay_metrics_random_port.to_string(),
+         ])
+         .env(env);
+ 
+@@ -221,6 +388,29 @@ pub async fn sync_para(
+             return Err(());
+         }
+     }
++    let head_timeout = std::env::var("ZOMBIE_BITE_PARA_SYNC_TIMEOUT_SECS")
++        .ok()
++        .and_then(|value| value.parse().ok())
++        .map(Duration::from_secs)
++        .unwrap_or_else(|| Duration::from_secs(24 * 60 * 60));
++    if wait_for_file(&para_head_path, head_timeout).await.is_err() {
++        error!(
++            "❌ Parachain sync stopped before Doppelganger wrote {}",
++            para_head_path
++        );
++        return Err(());
++    }
++    if wait_for_file(info_path.as_ref(), head_timeout)
++        .await
++        .is_err()
++    {
++        error!(
++            "❌ Parachain sync stopped before Doppelganger wrote {}",
++            info_path.as_ref()
++        );
++        return Err(());
++    }
++    wait_for_paritydb_quiescent(Path::new(&sync_db_path), head_timeout).await?;
+     // we should just paused
+     // sync_node.destroy().await.unwrap();
+     Ok((
+@@ -271,3 +461,39 @@ async fn is_syncing(url: Url) -> bool {
+         false
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn test_directory(name: &str) -> PathBuf {
++        std::env::temp_dir().join(format!(
++            "zombie-bite-{name}-{}-{}",
++            std::process::id(),
++            std::thread::current().name().unwrap_or("unnamed")
++        ))
++    }
++
++    #[test]
++    fn detects_active_paritydb_reindex() {
++        let root = test_directory("reindex");
++        fs::create_dir_all(&root).unwrap();
++        fs::File::create(root.join("index_01_17")).unwrap();
++        assert!(!paritydb_has_stale_indexes(&root).unwrap());
++        fs::File::create(root.join("index_01_18")).unwrap();
++        assert!(paritydb_has_stale_indexes(&root).unwrap());
++        fs::File::create(root.join("index_02_16")).unwrap();
++        assert!(paritydb_has_stale_indexes(&root).unwrap());
++        fs::remove_dir_all(root).unwrap();
++    }
++
++    #[test]
++    fn finds_nested_paritydb_database() {
++        let root = test_directory("find-db");
++        let full = root.join("chains/test/paritydb/full");
++        fs::create_dir_all(&full).unwrap();
++        fs::write(full.join("metadata"), b"metadata").unwrap();
++        assert_eq!(find_paritydb_full_path(&root).unwrap(), full);
++        fs::remove_dir_all(root).unwrap();
++    }
++}
