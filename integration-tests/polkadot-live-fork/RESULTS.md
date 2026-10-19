@@ -13,8 +13,9 @@ This file records the run of this harness against the #1320 head `e7d5d55aa`, wi
 | `make verify-fork` | Passed | 2026-10-19 12:16 |
 | `make verify` | Passed | 2026-10-19 12:17 |
 | `make upgrade` | Passed | 2026-10-19 12:17 to 12:24 (6 min 43 s) |
-| `make verify-upgrade` (900 s) | Running | started 2026-10-19 12:24 |
-| `make inspect-runtime-logs` | Not started | |
+| `make verify-upgrade` (900 s) | Passed | 2026-10-19 12:24 to 12:39 |
+| `make inspect-runtime-logs` | Passed, no errors | 2026-10-19 12:39 |
+| `make stop` | Passed, clean shutdown in 40 s | 2026-10-19 12:40 |
 
 ## Candidate build
 
@@ -75,6 +76,31 @@ All four local chains keep the live block number, parent hash, extrinsics root, 
 1. Asset Hub: unsigned `System.apply_authorized_upgrade` finalized, `2005000` to `2005001`. After enactment: PGAS `49_999_999` exists, `Assets.NextAssetId` did not change, and no multi-block migration is in progress.
 2. People: unsigned `System.apply_authorized_upgrade` finalized, `2005000` to `2005001`. After enactment: the Individuality pallet set is in the metadata.
 3. The People-to-Asset-Hub subscription is active on both chains after the People upgrade.
+
+## Post-upgrade observation (`make verify-upgrade`)
+
+- Asset Hub and People run the exact candidate bytes at `2005001`. Both `System.AuthorizedUpgrade` values were consumed.
+- Relay and Bulletin code did not change (`2005000`).
+- All 15 one-minute samples advanced on all four chains:
+
+| Chain | Start | End | Blocks |
+|---|---:|---:|---:|
+| Relay | `33499320` | `33499470` | +150 |
+| Asset Hub | `22021052` | `22021499` | +447 |
+| People | `11159790` | `11160229` | +439 |
+| Bulletin | `2305387` | `2305537` | +150 |
+
+## Runtime logs (`make inspect-runtime-logs`)
+
+Post-checkpoint lines: Asset Hub 152, People 43. Zero `ERROR`, panic, failed-migration, or essential-task lines.
+
+- Asset Hub ran `on_runtime_upgrade` (logged twice, at block import and at re-execution). `RemoveAhMigratorPallet` and `RemoveStateTrieMigrationPallet` removed 0 keys. There is no migration for `MembersSubscriber`, `Pgas`, or `PgasAllowance`.
+- People: `lite people collection already exists; skipping`. There is no migration for the Individuality pallets.
+- Both chains log `WARN` lines saying that some `VersionedMigration`s can be removed because on-chain storage is already at the target version: `XcmpQueue` 5->6 and 6->7 (both chains), and `Staking` 17->18 and `Dap` 1->2 (Asset Hub). These migrations are in `Unreleased` on `main` too. They are a possible cleanup, not a #1320 problem.
+
+## Result
+
+**Passed.** The #1320 Asset Hub and People runtimes upgrade from the live `2005000` state, the People-to-Asset-Hub subscription stays active, and all four chains keep producing blocks for 15 minutes after the upgrades.
 
 ## Environment
 
