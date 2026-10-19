@@ -35,6 +35,8 @@ const peopleSubscriberKey =
   "0xeed2209ef3b09989cb5b7851e0245754cb128dde8c9456194d7ea2f66ef6dc52e8030000";
 const peoplePendingInitKey =
   "0xeed2209ef3b09989cb5b7851e0245754b67d2cb81868e2929e11aebd249d84d3e8030000";
+const assetHubSubscriptionKey =
+  "0xc8d053ab324196afc756c5ae3fbd2917e97cd3ab6d3270ec6d48f6d8bde936a3";
 const peopleToAssetHubChannelKey =
   "0x6a0da05ca59913bc38a8630590f2627cb6604cff828a6e3f579ca6c59ace013d98ebe6f3ad4dcc3aec030000e8030000";
 const assetHubIngressIndexKey =
@@ -140,14 +142,24 @@ for (const [name, endpoint, artifactPath, expectedSpecVersion] of runtimeArtifac
 }
 
 const peopleEndpoint = endpoints[2][1];
-const [subscriberFixture, pendingInitFixture] = await Promise.all([
+const [subscriberFixture, pendingInitFixture, assetHubSubscription] = await Promise.all([
   rpc(peopleEndpoint, "state_getStorage", [peopleSubscriberKey]),
   rpc(peopleEndpoint, "state_getStorage", [peoplePendingInitKey]),
+  rpc(endpoints[1][1], "state_getStorage", [assetHubSubscriptionKey]),
 ]);
-if (!subscriberFixture || !pendingInitFixture) {
-  throw new Error("People: missing pre-seeded Asset Hub notifier subscription fixture");
+// The captured runtime already contains the notifier, so its offchain worker can process the
+// injected fixture before the upgrade. Accept a pending fixture or a completed initialization.
+if (subscriberFixture && pendingInitFixture) {
+  console.log("people: pending Asset Hub notifier initialization fixture present");
+} else if (subscriberFixture && !pendingInitFixture && assetHubSubscription) {
+  console.log(
+    "people: the captured runtime already completed the Asset Hub notifier initialization",
+  );
+} else {
+  throw new Error(
+    `People/Asset Hub notifier state is incomplete (subscriber=${Boolean(subscriberFixture)}, pending=${Boolean(pendingInitFixture)}, asset-hub subscription=${Boolean(assetHubSubscription)})`,
+  );
 }
-console.log("people: pending Asset Hub notifier initialization fixture present");
 
 const baseline = {};
 for (const [name, endpoint] of endpoints) {

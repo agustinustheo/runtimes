@@ -30,7 +30,14 @@ struct Args {
 	/// subsequent harness assertion failed; normal runs remain strict.
 	#[arg(long, default_value_t = false)]
 	allow_already_active: bool,
+	/// A pallet that the candidate adds. The client checks that it is in the metadata after the
+	/// upgrade. Repeat the flag for each pallet.
+	#[arg(long = "expect-pallet")]
+	expect_pallets: Vec<String>,
 }
+
+/// PGAS asset id on Asset Hub Polkadot (`PGAS_ASSET_ID` in `individuality.rs`).
+const PGAS_ASSET_ID: u128 = 49_999_999;
 
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum Chain {
@@ -71,29 +78,27 @@ async fn verify_asset_hub(
 		);
 	}
 
-	let pgas = dynamic_raw(client, "Assets", "Asset", vec![Value::u128(2_000_000_000)]).await?;
-	let cursor = dynamic_raw(client, "MultiBlockMigrations", "Cursor", vec![]).await?;
-	let revive_v4_id = b"pallet-revive-mbm\x03\x04";
-	let revive_v4 = dynamic_raw(
-		client,
-		"MultiBlockMigrations",
-		"Historic",
-		vec![Value::from_bytes(revive_v4_id)],
-	)
-	.await?;
-	let subscription = dynamic_raw(client, "MembersSubscriber", "Subscription", vec![]).await?;
-	let exponent = dynamic_raw(
-		client,
-		"MembersSubscriber",
-		"RingCollectionExponents",
-		vec![Value::from_bytes(b"pop:polkadot.network/people     ")],
-	)
-	.await?;
-	if subscription.is_some() || exponent.is_some() {
-		bail!("Asset Hub Individuality subscription existed before the People upgrade");
+	// Individuality is already live at the captured runtime, so PGAS must still exist and the
+	// Asset Hub subscription may already be active. Only wait for multi-block migrations.
+	let pgas = dynamic_raw(client, "Assets", "Asset", vec![Value::u128(PGAS_ASSET_ID)]).await?;
+	if pgas.is_none() {
+		bail!("Asset Hub PGAS asset {PGAS_ASSET_ID} is missing after the upgrade");
 	}
+	let cursor = dynamic_raw(client, "MultiBlockMigrations", "Cursor", vec![]).await?;
 
-	Ok(pgas.is_some() && cursor.is_none() && revive_v4.is_some())
+	Ok(cursor.is_none())
+}
+
+fn verify_expected_pallets(
+	client: &OnlineClient<PolkadotConfig>,
+	pallets: &[String],
+) -> Result<()> {
+	for pallet in pallets {
+		if client.metadata().pallet_by_name(pallet).is_none() {
+			bail!("candidate metadata is missing expected new pallet {pallet}");
+		}
+	}
+	Ok(())
 }
 
 fn verify_people_metadata(client: &OnlineClient<PolkadotConfig>) -> Result<()> {
@@ -194,6 +199,7 @@ async fn main() -> Result<()> {
 		println!(
 			"candidate code is already active at spec {original_spec}; continuing explicit recovery checks"
 		);
+		verify_expected_pallets(&client, &args.expect_pallets)?;
 		if matches!(args.chain, Chain::People) {
 			verify_people_metadata(&client)?;
 			println!("People candidate metadata contains the current Individuality pallet set");
@@ -256,9 +262,11 @@ async fn main() -> Result<()> {
 					match args.chain {
 						Chain::AssetHub => {
 							if verify_asset_hub(&post_client, &original_next_asset_id).await? {
+								verify_expected_pallets(&post_client, &args.expect_pallets)?;
 								println!(
-                                    "Asset Hub upgraded to {spec}; PGAS exists, NextAssetId is preserved, Revive v4 is historic, and no Individuality subscription exists before People upgrades"
-                                );
+									"Asset Hub upgraded to {spec}; PGAS exists, NextAssetId is preserved, multi-block migrations are done, and {} expected new pallet(s) are present",
+									args.expect_pallets.len()
+								);
 								break;
 							}
 							println!(
@@ -267,8 +275,10 @@ async fn main() -> Result<()> {
 						},
 						Chain::People => {
 							verify_people_metadata(&post_client)?;
+							verify_expected_pallets(&post_client, &args.expect_pallets)?;
 							println!(
-								"People upgraded to {spec}; the current Individuality pallet set is present in live metadata"
+								"People upgraded to {spec}; the Individuality pallet set and {} expected new pallet(s) are present",
+								args.expect_pallets.len()
 							);
 							break;
 						},

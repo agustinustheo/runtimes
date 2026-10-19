@@ -1,5 +1,8 @@
 # Polkadot live-fork runtime-upgrade test procedure
 
+> [!NOTE]
+> This file records the PR #1233 run on 2026-09-01 (`2003002` to `2004000`). This copy of the harness targets a later upgrade from the live `2005000`. Some expected values and checks are different. See [README.md](README.md).
+
 ## Purpose
 
 This procedure tests the Individuality runtime changes against captured Polkadot production state.
