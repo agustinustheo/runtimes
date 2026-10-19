@@ -15,8 +15,9 @@ The #1320 run uses its own capture. A capture cannot be shared between the two c
 | `make verify-fork` | Passed | 2026-10-19 13:15 |
 | `make verify` | Passed on the second run (see below) | 2026-10-19 13:16 |
 | `make upgrade` | Passed | 2026-10-19 13:16 to 13:23 (7 min 12 s) |
-| `make verify-upgrade` (900 s) | Running | started 2026-10-19 13:23 |
-| `make inspect-runtime-logs` | Not started | |
+| `make verify-upgrade` (900 s) | Passed | 2026-10-19 13:23 to 13:38 |
+| `make inspect-runtime-logs` | Passed, no errors | 2026-10-19 13:38 |
+| `make stop` | Passed, clean shutdown | 2026-10-19 13:39 |
 
 ## Candidate build
 
@@ -78,6 +79,34 @@ The second run passed:
 1. Asset Hub: unsigned `System.apply_authorized_upgrade` finalized, `2005000` to `2005001`. After enactment: PGAS `49_999_999` exists, `Assets.NextAssetId` did not change, no multi-block migration is in progress, and `NftClaims` and `Scarcity` are in the metadata.
 2. People: unsigned `System.apply_authorized_upgrade` finalized, `2005000` to `2005001`. After enactment: the Individuality pallet set and `Game`, `Score`, `NftCredits`, `Airdrop`, and `PeopleAirdrops` are in the metadata.
 3. The People-to-Asset-Hub subscription is active on both chains after the People upgrade.
+
+## Post-upgrade observation (`make verify-upgrade`)
+
+- Asset Hub and People run the exact candidate bytes at `2005001`. Both `System.AuthorizedUpgrade` values were consumed.
+- Relay and Bulletin code did not change (`2005000`).
+- All 15 one-minute samples advanced on all four chains:
+
+| Chain | Start | End | Blocks |
+|---|---:|---:|---:|
+| Relay | `33499835` | `33499985` | +150 |
+| Asset Hub | `22024764` | `22025214` | +450 |
+| People | `11163514` | `11163958` | +444 |
+| Bulletin | `2306648` | `2306798` | +150 |
+
+## Runtime logs (`make inspect-runtime-logs`)
+
+Post-checkpoint lines: Asset Hub 160, People 106. Zero `ERROR`, panic, failed-migration, or essential-task lines. Each upgrade message is logged twice (block import and re-execution).
+
+- FRAME initialized the storage version of each new pallet:
+  - Asset Hub: `NftClaims` to `StorageVersion(1)`, `Scarcity` to `StorageVersion(2)`.
+  - People: `NftCredits` to `StorageVersion(1)`. `Game`, `Score`, `Airdrop`, and `PeopleAirdrops` have no defined storage version, so FRAME set `StorageVersion(0)`.
+- People: `lite people collection already exists; skipping`.
+- Asset Hub: `RemoveAhMigratorPallet` and `RemoveStateTrieMigrationPallet` removed 0 keys.
+- The same `WARN` lines as in the #1320 run: `VersionedMigration`s that already ran on chain (`XcmpQueue` 5->6 and 6->7, `Staking` 17->18, `Dap` 1->2). These are also in `main`, so they are not a #1306 problem.
+
+## Result
+
+**Passed.** The #1306 Asset Hub and People runtimes upgrade from the live `2005000` state. The seven new pallets are in the metadata and get their storage versions, the People-to-Asset-Hub subscription stays active, and all four chains keep producing blocks for 15 minutes after the upgrades.
 
 ## Environment
 
