@@ -63,7 +63,7 @@ use indiv_support::{
 use polkadot_runtime_constants::system_parachain::ASSET_HUB_ID;
 use scale_info::TypeInfo;
 use sp_runtime::{
-	traits::{AccountIdConversion, ConstI8, ConstU16},
+	traits::{ConstI8, ConstU16},
 	DispatchError, DispatchResult, MultiSignature,
 };
 use sp_statement_store::StatementAllowance;
@@ -448,6 +448,7 @@ pub enum RestrictedEntity {
 	PersonalIdentity(u64),
 	LitePerson(AccountId),
 	LiteAlias(Alias),
+	AccountParticipant(AccountId),
 }
 
 impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> for RestrictedEntity {
@@ -463,12 +464,21 @@ impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> fo
 				max: crate::parameters::LitePeopleAllowanceMax::get(),
 				recovery_per_block: crate::parameters::LitePeopleAllowanceRecovery::get(),
 			},
+			// `ScoreAsParticipant` drops the signed origin, so no fee is paid; restrict instead.
+			RestrictedEntity::AccountParticipant(_) => Allowance {
+				max: 0,
+				recovery_per_block: crate::parameters::AccountParticipantAllowanceRecovery::get(),
+			},
 		}
 	}
 
+	// `game::Origin::Invited` pays no fee either, but is not restricted: `GameAsInvited` only
+	// accepts `sign_up_with_invite` and consumes a pending invite in `prepare`, so each such
+	// transaction spends an invite that was granted beforehand.
 	fn restricted_entity(origin_caller: &OriginCaller) -> Option<Self> {
 		use indiv_pallet_people::Origin::*;
 		use indiv_pallet_people_lite::Origin::*;
+		use indiv_pallet_score::Origin::*;
 		match origin_caller {
 			OriginCaller::People(PersonalIdentity(id)) =>
 				Some(RestrictedEntity::PersonalIdentity(*id)),
@@ -478,6 +488,8 @@ impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> fo
 				Some(RestrictedEntity::LitePerson(account_id.clone())),
 			OriginCaller::PeopleLite(LiteAlias(rev_ca)) =>
 				Some(RestrictedEntity::LiteAlias(rev_ca.ca.alias)),
+			OriginCaller::Score(AccountParticipant(account_id)) =>
+				Some(RestrictedEntity::AccountParticipant(account_id.clone())),
 			_ => None,
 		}
 	}
@@ -487,8 +499,27 @@ impl indiv_pallet_origin_restriction::RestrictedEntity<OriginCaller, Balance> fo
 pub struct OperationAllowedOneTimeExcess;
 impl ContainsPair<RestrictedEntity, RuntimeCall> for OperationAllowedOneTimeExcess {
 	#[cfg(not(feature = "runtime-benchmarks"))]
-	fn contains(_entity: &RestrictedEntity, _call: &RuntimeCall) -> bool {
-		false
+	fn contains(entity: &RestrictedEntity, call: &RuntimeCall) -> bool {
+		use indiv_pallet_game::Call::*;
+		use indiv_pallet_score::Call::*;
+		match entity {
+			// The calls that accept the `AccountParticipant` origin. Any other call fails
+			// with `BadOrigin`, but still takes block space without paying, so reject it here.
+			RestrictedEntity::AccountParticipant(_) => matches!(
+				call,
+				RuntimeCall::Score(cash_out { .. }) |
+					RuntimeCall::Score(redeem_credit { .. }) |
+					RuntimeCall::Score(register { .. }) |
+					RuntimeCall::Game(sign_up_with_account { .. }) |
+					RuntimeCall::Game(report { .. }) |
+					RuntimeCall::Game(offboard { .. }) |
+					RuntimeCall::Game(claim_airdrop { .. })
+			),
+			RestrictedEntity::PersonalAlias(_) |
+			RestrictedEntity::PersonalIdentity(_) |
+			RestrictedEntity::LitePerson(_) |
+			RestrictedEntity::LiteAlias(_) => false,
+		}
 	}
 
 	// We need to have one for benchmarks.
@@ -561,11 +592,26 @@ parameter_types! {
 	pub const PlayDepositReason: RuntimeHoldReason =
 		RuntimeHoldReason::Game(indiv_pallet_game::HoldReason::PlayDeposit);
 	pub const PlayDepositDefault: Balance = 2 * UNITS;
+	// The game clients signal WebRTC over one session per peer, with a request and a response
+	// channel. Android caps a statement at 1 KiB. iOS uses the 500 KiB chat cap, but sends a
+	// compact SDP without candidates and at most 12 candidates per batch, which fit in 1 KiB. A
+	// player connects to up to 10 peers at once (its group and the next round's), so 20
+	// statements and 20 KiB, plus a margin of 4.
+	//
+	// Android:
+	// * Statement size: https://github.com/paritytech/polkadot-android-community/blob/31990f50c9a8abad8cc8fc57f9eb3dcdd8bb0de7/feature/videogame/impl/src/main/java/io/paritytech/polkadotapp/feature_videogame_impl/service/VideoGamePeerChannel.kt#L43
+	// * Connected peers: https://github.com/paritytech/polkadot-android-community/blob/31990f50c9a8abad8cc8fc57f9eb3dcdd8bb0de7/feature/videogame/impl/src/main/java/io/paritytech/polkadotapp/feature_videogame_impl/service/VideoGameSessionManager.kt#L152
+	// * Channels: https://github.com/paritytech/polkadot-android-community/blob/31990f50c9a8abad8cc8fc57f9eb3dcdd8bb0de7/feature/statement-store/impl/src/main/kotlin/io/paritytech/polkadotapp/feature_statement_store_impl/domain/sessions/codec/StatementChannels.kt#L12-L14
+	//
+	// iOS:
+	// * Statement size: https://github.com/paritytech/polkadot-ios-community/blob/78e12f8af0b2cc3a41d683014b00847d78104fc4/polkadot-app/Modules/DIMs/DIM2/Game/GameVideo/GameVideoViewFactory.swift#L117
+	// * Signal batches: https://github.com/paritytech/polkadot-ios-community/blob/78e12f8af0b2cc3a41d683014b00847d78104fc4/polkadot-app/Modules/ChatCall/Connection/PeerConnectionSignalBatcher.swift#L13-L39
+	// * Connected peers: https://github.com/paritytech/polkadot-ios-community/blob/78e12f8af0b2cc3a41d683014b00847d78104fc4/polkadot-app/Modules/DIMs/DIM2/Game/Services/GameVideo/GameVideoService.swift#L244
+	// * Channels: https://github.com/paritytech/polkadot-ios-community/blob/78e12f8af0b2cc3a41d683014b00847d78104fc4/Packages/MessageExchangeKit/Sources/Models/StatementChannelFactory.swift#L15-L23
 	pub PlayerStatementLimit: StatementAllowance = StatementAllowance {
-		max_size: 1_000_000,
-		max_count: 1_000_000,
+		max_size: 24 * 1024,
+		max_count: 24,
 	};
-	pub GameAirdropSource: AccountId = PalletId(*b"pop/gads").into_account_truncating();
 }
 
 impl indiv_pallet_game::Config for Runtime {
@@ -606,11 +652,17 @@ impl indiv_pallet_game::Config for Runtime {
 	type PlayerStatementLimit = PlayerStatementLimit;
 	type PeopleVoteWeight = ConstUint<2>;
 	type CandidateVoteWeight = ConstUint<1>;
+	// Groups have at least three players, so a game's `max_group_size` is 4 to `MaxGroupSize`.
+	// Some game benchmarks schedule games with `max_group_size = 2`, so the benchmarking build
+	// keeps the pallet minimum of 2. The weights do not depend on this value.
+	#[cfg(not(feature = "runtime-benchmarks"))]
+	type MinGroupSize = ConstUint<3>;
+	#[cfg(feature = "runtime-benchmarks")]
 	type MinGroupSize = ConstUint<2>;
 	type AirdropAssetId = <Runtime as pallet_assets::Config>::AssetId;
 	type AirdropAssetBalance = Balance;
 	type Airdrop = Airdrop;
-	type AirdropSource = GameAirdropSource;
+	type AirdropSource = crate::parameters::GameAirdropSource;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = benchmark_utils::GamePalletBenchmarkHelper;
 }
@@ -858,7 +910,7 @@ pub mod benchmark_utils {
 		genesis::ring_verifier_builder_params,
 		traits::{AddOnlyPeopleTrait, AppendOnlyMembers, RingMode},
 	};
-	use sp_runtime::traits::IdentifyAccount;
+	use sp_runtime::traits::{AccountIdConversion, IdentifyAccount};
 	use verifiable::ring::RingDomainSize;
 
 	/// Reads `pallet_timestamp::Now` directly, deliberately skipping `pallet_timestamp::Pallet`'s

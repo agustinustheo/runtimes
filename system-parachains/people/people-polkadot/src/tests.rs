@@ -530,6 +530,41 @@ fn people_airdrops_prize_source_is_set_by_governance() {
 	});
 }
 
+/// The game pallet reads its airdrop source from the governance parameter.
+#[test]
+fn game_airdrop_source_is_set_by_governance() {
+	use crate::{
+		parameters::{dynamic_params::game, RuntimeParameters},
+		Parameters, RuntimeGenesisConfig,
+	};
+	use frame_support::{traits::Get, PalletId};
+	use sp_runtime::{traits::AccountIdConversion, BuildStorage};
+
+	type AirdropSource = <Runtime as indiv_pallet_game::Config>::AirdropSource;
+
+	let mut ext = sp_io::TestExternalities::new(
+		RuntimeGenesisConfig::default().build_storage().expect("runtime genesis builds"),
+	);
+	ext.execute_with(|| {
+		// GIVEN the default airdrop source is the dedicated pallet account.
+		let default: AccountId = PalletId(*b"pop/gads").into_account_truncating();
+		assert_eq!(AirdropSource::get(), default);
+
+		// WHEN Root points it at another account.
+		let updated = AccountId::from(ALICE);
+		assert_ok!(Parameters::set_parameter(
+			RuntimeOrigin::root(),
+			RuntimeParameters::Game(game::Parameters::AirdropSource(
+				game::AirdropSource,
+				Some(updated.clone()),
+			)),
+		));
+
+		// THEN the pallet funds airdrops from that account.
+		assert_eq!(AirdropSource::get(), updated);
+	});
+}
+
 #[test]
 fn people_airdrops_context_is_an_account_context() {
 	use crate::{individuality::AccountContexts, PeopleAirdrops, RuntimeGenesisConfig};
@@ -635,8 +670,8 @@ fn dynamic_parameter_origin_routes_keys_by_scope() {
 	use crate::{
 		parameters::{
 			dynamic_params::{
-				bulletin_storage, coinage, external_asset, lite_personhood, origin_restriction,
-				people_airdrops, statement_storage,
+				bulletin_storage, coinage, external_asset, game, lite_personhood,
+				origin_restriction, people_airdrops, statement_storage,
 			},
 			DynamicParameterOrigin, RuntimeParameters, RuntimeParametersKey,
 		},
@@ -675,6 +710,7 @@ fn dynamic_parameter_origin_routes_keys_by_scope() {
 		OriginRestriction(origin_restriction::PeopleIdentityAndAliasAllowanceRecovery.into()),
 		OriginRestriction(origin_restriction::LitePeopleAllowanceMax.into()),
 		OriginRestriction(origin_restriction::LitePeopleAllowanceRecovery.into()),
+		OriginRestriction(origin_restriction::AccountParticipantAllowanceRecovery.into()),
 		LitePersonhood(lite_personhood::RegistrationFee.into()),
 	];
 	let root_only = [
@@ -684,6 +720,7 @@ fn dynamic_parameter_origin_routes_keys_by_scope() {
 		Coinage(coinage::InstanceCreationDeposit.into()),
 		ExternalAsset(external_asset::AssetLocation.into()),
 		PeopleAirdrops(people_airdrops::PrizeSource.into()),
+		Game(game::AirdropSource.into()),
 	];
 
 	// THEN Root passes all, the voice only the operational keys.
@@ -731,5 +768,35 @@ fn session_key_deposit_works() {
 	system_parachains_test_utils::session_key_deposit_works::<Runtime>(|owner| {
 		let generated = SessionKeys::generate(&owner.encode(), None);
 		(generated.keys, generated.proof.encode())
+	});
+}
+
+// The benchmarking build replaces `OperationAllowedOneTimeExcess` with its own pair.
+#[cfg(not(feature = "runtime-benchmarks"))]
+#[test]
+fn score_participant_origin_is_restricted() {
+	use crate::{
+		individuality::{OperationAllowedOneTimeExcess, RestrictedEntity},
+		OriginCaller,
+	};
+	use frame_support::traits::ContainsPair;
+	use indiv_pallet_origin_restriction::RestrictedEntity as _;
+
+	sp_io::TestExternalities::default().execute_with(|| {
+		// GIVEN the origin `ScoreAsParticipant` dispatches with, which pays no fee.
+		let account = AccountId::from(ALICE);
+		let origin =
+			OriginCaller::Score(indiv_pallet_score::Origin::AccountParticipant(account.clone()));
+
+		// THEN it is rate limited with no allowance of its own.
+		let entity = RestrictedEntity::restricted_entity(&origin).expect("origin is restricted");
+		assert_eq!(entity, RestrictedEntity::AccountParticipant(account));
+		assert_eq!(entity.allowance().max, 0);
+
+		// AND only the calls taking this origin may go into debt.
+		let remark = RuntimeCall::System(frame_system::Call::remark { remark: vec![0; 1024] });
+		assert!(!OperationAllowedOneTimeExcess::contains(&entity, &remark));
+		let cash_out = RuntimeCall::Score(indiv_pallet_score::Call::cash_out {});
+		assert!(OperationAllowedOneTimeExcess::contains(&entity, &cash_out));
 	});
 }
