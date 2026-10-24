@@ -16,6 +16,7 @@ This file records the run of this harness against the #1320 head `e7d5d55aa`, wi
 | `make verify-upgrade` (900 s) | Passed | 2026-10-19 12:24 to 12:39 |
 | `make inspect-runtime-logs` | Passed, no errors | 2026-10-19 12:39 |
 | `make stop` | Passed, clean shutdown in 40 s | 2026-10-19 12:40 |
+| Run 2 (retained capture) | Passed, see below | 2026-10-23 23:21 to 2026-10-24 00:45 |
 
 ## Candidate build
 
@@ -108,3 +109,32 @@ Post-checkpoint lines: Asset Hub 152, People 43. Zero `ERROR`, panic, failed-mig
 - Node.js `v24.14.1`. The RPC scripts need the global `WebSocket`, which Node.js 20 does not have.
 - `polkadot-omni-node` `1.24.1-8ae9775dc43` from `preview-net-v1/bin` (`polkadot-stable2606-1`).
 - Zombie Bite `6d16648178ab` with `patches/zombie-bite-live-fork.patch`, Doppelganger `v0.2.1`.
+
+## Run 2: rerun from the retained capture (2026-10-24)
+
+The #1320 head is still `e7d5d55aa`, so the candidate WASM hashes did not change. The retained 2026-10-19 capture authorizes these exact candidates, so the harness reused it without a new sync. Each `make spawn` makes a new working copy, so the retained snapshots stay unchanged.
+
+| Phase | Status | UTC |
+|---|---|---|
+| `make spawn` | Passed, network up in 52 s | 2026-10-23 23:21:59 to 23:22:51 |
+| `make verify-fork` | Passed, all four fork boundaries retained | 2026-10-24 00:22 |
+| `make verify` | Passed, both chains at `2005000` with the candidate authorization | 2026-10-24 00:22 |
+| `make upgrade` | Passed, Asset Hub then People | 2026-10-24 00:22 to 00:29 |
+| `make verify-upgrade` (900 s) | Passed | 2026-10-24 00:29 to 00:44 |
+| `make inspect-runtime-logs` | Passed, no errors | 2026-10-24 00:44 |
+| `make stop` | Passed, clean shutdown in about 35 s | 2026-10-24 00:45 |
+
+Upgrade: Asset Hub reached `2005001` with PGAS present, `NextAssetId` preserved and the multi-block migrations done. People reached `2005001` with the Individuality pallet set present. The People-to-Asset-Hub initialization XCM completed, and the Asset Hub subscription is active.
+
+Post-upgrade observation: only Asset Hub and People upgraded. Relay and Bulletin stayed at `2005000`. All 15 samples advanced on all four chains:
+
+| Chain | Start | End | Blocks |
+|---|---:|---:|---:|
+| Relay | `33499901` | `33500051` | 150 |
+| Asset Hub | `22022788` | `22023238` | 450 |
+| People | `11161534` | `11161971` | 437 |
+| Bulletin | `2305968` | `2306118` | 150 |
+
+Runtime logs: no errors and no panics. The only warnings are the same `VersionedMigration ... can be removed` notes as in run 1 (XcmpQueue 5->6 and 6->7, Staking 17->18, Dap 1->2). They also apply to `main`.
+
+**Run 2 result: passed**, with the same outcome as run 1.
