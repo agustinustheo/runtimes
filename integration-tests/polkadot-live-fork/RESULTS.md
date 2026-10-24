@@ -18,6 +18,7 @@ The #1320 run uses its own capture. A capture cannot be shared between the two c
 | `make verify-upgrade` (900 s) | Passed | 2026-10-19 13:23 to 13:38 |
 | `make inspect-runtime-logs` | Passed, no errors | 2026-10-19 13:38 |
 | `make stop` | Passed, clean shutdown | 2026-10-19 13:39 |
+| Run 2 (head `d9df0e88a`, fresh capture) | Passed, see below | 2026-10-23 14:54 to 2026-10-24 01:49 |
 
 ## Candidate build
 
@@ -114,3 +115,54 @@ Post-checkpoint lines: Asset Hub 160, People 106. Zero `ERROR`, panic, failed-mi
 - Node.js `v24.14.1`. The RPC scripts need the global `WebSocket`, which Node.js 20 does not have.
 - `polkadot-omni-node` `1.24.1-8ae9775dc43` from `preview-net-v1/bin` (`polkadot-stable2606-1`).
 - Zombie Bite `6d16648178ab` with `patches/zombie-bite-live-fork.patch`, Doppelganger `v0.2.1`.
+
+## Run 2: new #1306 head (2026-10-23 to 2026-10-24)
+
+This run tests the #1306 head `d9df0e88a`, merged into the harness branch with the test-only `spec_version` bump to `2005001`. The head adds Tim's review changes (PlayerStatementLimit, the `AccountParticipant` rate limit, the `Invited` origin note, the dynamic Game airdrop source, and the CHANGELOG entry) and a merge of `main` at `66945c626` (#1324). The candidate WASM hashes changed, so the run 1 capture could not be reused: its snapshots authorize only the old hashes. This run made a fresh production capture in `artifacts-pr1306-20261023`.
+
+| Phase | Status | UTC |
+|---|---|---|
+| Candidate build | Passed | 2026-10-23 14:54 to 14:57 |
+| Preflight (live RPCs) | Passed, all four chains at `2005000` | 2026-10-23 14:57 |
+| Capture, parachains | Passed | 2026-10-23 14:57 to 17:12 |
+| Capture, relay | Passed on the third relay attempt (see below) | 2026-10-24 01:09 to 01:15 |
+| `make spawn` | Passed, network up in about 1 min | 2026-10-24 01:24 to 01:25 |
+| `make verify-fork` | Passed | 2026-10-24 01:25 |
+| `make verify` | Passed | 2026-10-24 01:26 |
+| `make upgrade` | Passed | 2026-10-24 01:26 to 01:32 (6 min 12 s) |
+| `make verify-upgrade` (900 s) | Passed | 2026-10-24 01:33 to 01:48 |
+| `make inspect-runtime-logs` | Passed, no errors | 2026-10-24 01:48 |
+| `make stop` | Passed, clean shutdown in about 40 s | 2026-10-24 01:49 |
+
+Candidates:
+
+| Candidate | `spec_version` | SHA-256 |
+|---|---:|---|
+| Asset Hub | `2005001` | `1fdef73481faedffe34705d1f8fc5e0eae92c767d673d4d3a5d15e3fa8580e13` |
+| People | `2005001` | `3e2b07e5e973ac1c3333a47cfd13c73211063052aa14db87fa33c5a643b47ac8` |
+
+Capture notes:
+
+- The parachain captures (Asset Hub, People, Bulletin) completed in the first attempt.
+- The first relay attempt could not start. The macOS `/tmp` cleaner deleted the cached `doppelganger` binary, which had not been used for three days. The tool cache now lives in `~/.cache/polkadot-zombie-bite-tools` through `ZOMBIE_BITE_TOOL_CACHE`.
+- The second and third relay attempts reused the completed parachain captures of this run with `ZOMBIE_BITE_REUSE_PARA_ARTIFACTS=1`. The relay was always captured fresh.
+- The second relay attempt stalled in warp sync (at 760 eras, then at 2877 of 3672 eras) for several hours and was stopped. The third attempt warped from 759 to 3634 eras in 3 minutes and completed.
+
+Fork boundaries (`make verify-fork`): Asset Hub `22196893`, People `11337327`, Bulletin `2364771`, and the relay, with state roots rewritten as expected for the runtime and authority overrides.
+
+Pre-upgrade checks: both chains ran the live `2005000` runtime with the candidate authorization present. The captured People runtime had already completed the Asset Hub notifier initialization. The relay kept the live People-to-Asset-Hub HRMP head `0x2a16ee7d…0b541693`.
+
+Upgrade: Asset Hub reached `2005001` with PGAS present, `NextAssetId` preserved, the multi-block migrations done, and the 2 expected new pallets (`NftClaims`, `Scarcity`). People reached `2005001` with the Individuality pallet set and the 5 expected new pallets (`Game`, `Score`, `NftCredits`, `Airdrop`, `PeopleAirdrops`). The People-to-Asset-Hub initialization XCM completed, and the Asset Hub subscription is active.
+
+Post-upgrade observation: only Asset Hub and People upgraded. Relay and Bulletin stayed at `2005000`. All 15 samples advanced on all four chains:
+
+| Chain | Start | End | Blocks |
+|---|---:|---:|---:|
+| Relay | `33564607` | `33564757` | 150 |
+| Asset Hub | `22197099` | `22197549` | 450 |
+| People | `11337554` | `11337995` | 441 |
+| Bulletin | `2364849` | `2364999` | 150 |
+
+Runtime logs: no errors and no panics. FRAME initialized the same storage versions as in run 1: `NftClaims` `1`, `Scarcity` `2`, `NftCredits` `1`, and `0` for `Game`, `Score`, `Airdrop` and `PeopleAirdrops`. The only warnings are the `VersionedMigration ... can be removed` notes (XcmpQueue 5->6 and 6->7, Staking 17->18, Dap 1->2), which also apply to `main`.
+
+**Run 2 result: passed.**
